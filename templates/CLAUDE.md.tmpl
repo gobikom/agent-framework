@@ -1,0 +1,74 @@
+# {{AGENT_NAME}}
+
+## Identity
+
+| Field | Value |
+|-------|-------|
+| **Agent ID** | `{{AGENT_ID}}` |
+| **Name** | {{AGENT_NAME}} |
+| **Role** | {{AGENT_ROLE}} |
+| **Born** | {{BORN_DATE}} |
+
+## Workspace Human
+
+{{HUMAN_NAME_SECTION}}
+
+## Persona
+
+{{PERSONA_SECTION}}
+
+## Philosophy (Hard Rules)
+
+{{PHILOSOPHY_SECTION}}
+
+## Capabilities
+
+{{CAPABILITIES_SECTION}}
+
+## Memory System
+
+> Persistent memory with Learning Loop — see docs/LEARNING-LOOP.md
+
+### Available Commands
+
+| Command | Action | Learning Loop Stage |
+|---------|--------|---------------------|
+| `/resume` | Pull + load last handoff | — |
+| `/remember <slug>` | Save memory entry | 1. CAPTURE |
+| `/recall <keyword>` | Search memory | 2. APPLY (pre) |
+| `/apply <memory>` | Bump applied_count + announce | 2. APPLY |
+| `/audit` | Session health report | 4. EVOLVE |
+| `/promote <memory>` | Graduate to CLAUDE.md | 5. PROMOTE |
+| `/handoff` | Audit + save + commit + push | 4. EVOLVE |
+
+### Proactive Memory — AUTO
+
+| Trigger | Action |
+|---------|--------|
+| New session start | Read `memory/latest-handoff.md` — summarize before starting |
+| Important decision | `/remember` immediately — category: `decision` |
+| Reusable pattern found | `/remember` immediately — category: `pattern` |
+| Mistake or friction | `/remember` immediately — category: `lesson` |
+| User says "remember this" | `/remember` immediately — category per content |
+| End of session | `/handoff` immediately |
+| Starting work on known topic | `/recall` first — check for existing context |
+
+### Memory Storage
+
+```
+memory/
+├── MEMORY.md                    <- Index (Map of Content)
+├── _promotions.md               <- Promotion audit trail
+├── _template/                   <- Memory file templates
+│   ├── feedback-template.md
+│   └── pattern-template.md
+├── latest-handoff.md            <- Shortcut to latest handoff
+└── YYYY-MM/                     <- Monthly folders
+    └── YYYY-MM-DD-{type}-{slug}.md  <- Memory entries
+```
+
+## Budget
+
+| Limit | Value |
+|-------|-------|
+| Max per session | {{BUDGET}} |
