@@ -1,117 +1,176 @@
 # Agent Framework
 
-Scaffold persistent AI agents with memory, learning loop, personality, and dual-runtime support (Claude Code + Codex/Antigravity).
+Scaffold persistent AI agents with memory, learning loop, personality, and dual-runtime support.
 
-## What It Does
+## Overview
 
-Creates a new AI agent repo with:
-- **Identity** — CLAUDE.md + AGENTS.md generated from an interactive wizard
+Agent Framework creates a complete agent repo with:
+
+- **Identity** — `CLAUDE.md` + `AGENTS.md` generated from an interactive wizard
 - **Persistent Memory** — `memory/` directory with structured YAML-frontmatter markdown files
 - **5-Stage Learning Loop** — Capture → Apply → Verify → Evolve → Promote
-- **7 Core Skills** — `/remember`, `/recall`, `/apply`, `/audit`, `/handoff`, `/resume`, `/promote`
-- **Dual-Runtime** — Works with Claude Code (.claude/commands/) and Codex/Antigravity (AGENTS.md)
+- **7 Core Skills** — remember, recall, apply, audit, handoff, resume, promote
+- **Dual-Runtime** — Claude Code (slash commands) + Codex/Antigravity (AGENTS.md)
+- **Zero Dependencies** — Pure markdown + bash. No database, no server, no runtime.
 
 ## Quick Start
 
-### Create a New Agent
-
 ```bash
-# From the target repo directory
-~/repos/agents/agent-framework/scripts/agent-init.sh .
+# 1. Create a new agent
+agent-init ~/repos/my-agent/
 
-# Then in Claude Code:
-/agent-init
-# → Interactive wizard asks 6 questions → builds everything
+# 2. Open Claude Code in the new repo, run the wizard
+cd ~/repos/my-agent && claude
+# Then type: /agent-init
+
+# 3. Start working — your agent has memory now
+/resume            # Load last session context
+/remember <slug>   # Save something to memory
+/recall <keyword>  # Search memory
+/handoff           # End session (save + commit + push)
 ```
 
-### Update Skills in Existing Agent
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for full setup instructions.
 
-```bash
-# Single repo
-~/repos/agents/agent-framework/scripts/agent-install.sh ~/repos/my-agent/
+## How It Works
 
-# All agent repos under ~/repos/
-~/repos/agents/agent-framework/scripts/agent-install-all.sh
-~/repos/agents/agent-framework/scripts/agent-install-all.sh --dry-run  # preview
+### The Learning Loop
+
+AI agents forget everything between sessions. The Learning Loop solves this with a 5-stage pipeline that turns corrections into permanent behavioral changes:
+
+```
+  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+  │ 1 CAPTURE│──>│ 2 APPLY  │──>│ 3 VERIFY │──>│ 4 EVOLVE │──>│ 5 PROMOTE│
+  │ /remember│   │ /apply   │   │ (auto)   │   │ /audit   │   │ /promote │
+  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
+       ^                                              |               |
+       └──────────────────────────────────────────────┘               v
+                          refine                              CLAUDE.md rule
 ```
 
-## Structure
+| Stage | What Happens | Command |
+|-------|-------------|---------|
+| **CAPTURE** | Agent detects a correction, pattern, or decision → saves to `memory/` | `/remember` |
+| **APPLY** | Before acting, agent recalls relevant memories → announces transparently | `/recall` + `/apply` |
+| **VERIFY** | User confirms or corrects → memory metadata updated | (embedded in apply) |
+| **EVOLVE** | Session-end audit: stale? missed? promotion-ready? | `/audit` (auto via `/handoff`) |
+| **PROMOTE** | Memory proven 3+ times across contexts → graduates to CLAUDE.md | `/promote` |
+
+See [docs/LEARNING-LOOP.md](docs/LEARNING-LOOP.md) for the full architecture and rationale.
+
+### The Wizard
+
+The `/agent-init` wizard asks 6 freetext questions in a single prompt:
+
+1. **Agent name** — "TestBot", "Vera", "Atlas"
+2. **Role / purpose** — "QA engineer", "Code reviewer", "DevOps specialist"
+3. **Personality / tone** — "Friendly, uses emoji sparingly", "Precise and formal"
+4. **Philosophy / hard rules** — "Always test before deploy", "Never assume, always ask"
+5. **Human name** — How the agent should address you
+6. **Language** — Primary language for output
+
+The AI parses freetext answers, generates full persona + philosophy prose, and creates all files in one pass. No presets, no templates to fill — the wizard creates a unique agent from your description.
+
+### Memory Structure
+
+```
+memory/
+├── MEMORY.md                         <- Index (Map of Content, wikilinks)
+├── _promotions.md                    <- Promotion audit trail
+├── _template/                        <- Memory file templates
+│   ├── feedback-template.md
+│   └── pattern-template.md
+├── latest-handoff.md                 <- Quick-access to last session
+└── 2026-07/                          <- Monthly folders (auto-created)
+    ├── 2026-07-06-feedback-slug.md   <- Memory entries
+    └── 2026-07-06-pattern-slug.md
+```
+
+Each memory entry has YAML frontmatter tracking: `applied_count`, `last_applied`, `verified_by_user`, `promoted_to`, `status`. This metadata drives the learning loop — the agent can't promote something it hasn't verified.
+
+## Dual-Runtime Support
+
+| Runtime | Identity File | Skills | Status |
+|---------|--------------|--------|--------|
+| **Claude Code** | `CLAUDE.md` | `.claude/commands/agent-core/*.md` (slash commands) | Full support |
+| **Codex / Antigravity** | `AGENTS.md` | `.claude/commands/agent-core/*.md` (read by agent) | Identity + memory; skills via file reference |
+
+Both files are generated from the same wizard answers. The content is identical; only the framing differs (slash commands vs natural language).
+
+## Project Structure
 
 ```
 agent-framework/
 ├── scripts/
-│   ├── agent-init.sh           # Scaffold new agent repo
-│   ├── agent-install.sh        # Install/update skills in target repo
-│   └── agent-install-all.sh    # Batch update all agent repos
+│   ├── agent-init.sh              # Scaffold new agent repo
+│   ├── agent-install.sh           # Install/update skills in a repo
+│   └── agent-install-all.sh       # Batch update all agent repos
 ├── wizard/
-│   └── wizard.md               # Interactive birth wizard (Claude Code command)
+│   └── wizard.md                  # Interactive birth wizard
 ├── templates/
-│   ├── CLAUDE.md.tmpl           # Identity template (Claude Code)
-│   ├── AGENTS.md.tmpl           # Identity template (Codex/Antigravity)
-│   ├── .gitignore.tmpl
-│   └── memory/                  # Memory structure templates
-│       ├── MEMORY.md.tmpl
-│       ├── _promotions.md.tmpl
-│       ├── latest-handoff.md
-│       └── _template/
+│   ├── CLAUDE.md.tmpl             # Claude Code identity template
+│   ├── AGENTS.md.tmpl             # Codex/Antigravity identity template
+│   ├── .gitignore.tmpl            # Default gitignore
+│   └── memory/                    # Memory structure templates
+│       ├── MEMORY.md.tmpl         # Index template
+│       ├── _promotions.md.tmpl    # Promotion log template
+│       ├── latest-handoff.md      # Placeholder
+│       └── _template/             # Memory entry templates
 │           ├── feedback-template.md
 │           └── pattern-template.md
-├── skills/                      # 7 core learning loop commands
-│   ├── remember.md              # Stage 1: CAPTURE
-│   ├── recall.md                # Search memory
-│   ├── apply.md                 # Stage 2: APPLY
-│   ├── audit.md                 # Stage 4: EVOLVE
-│   ├── handoff.md               # End-of-session (audit + commit + push)
-│   ├── resume.md                # Start-of-session (pull + restore)
-│   └── promote.md               # Stage 5: PROMOTE
+├── skills/                        # 7 core learning loop commands
+│   ├── remember.md                # Stage 1: CAPTURE
+│   ├── recall.md                  # Memory search
+│   ├── apply.md                   # Stage 2: APPLY (with verify)
+│   ├── audit.md                   # Stage 4: EVOLVE
+│   ├── handoff.md                 # End-of-session
+│   ├── resume.md                  # Start-of-session
+│   └── promote.md                 # Stage 5: PROMOTE
 └── docs/
-    ├── LEARNING-LOOP.md         # Architecture: why & how the 5 stages work
-    └── CUSTOMIZATION.md         # Customize persona, add skills, change language
+    ├── INSTALLATION.md            # Setup and installation guide
+    ├── LEARNING-LOOP.md           # Architecture deep-dive
+    └── CUSTOMIZATION.md           # Persona, language, skills customization
 ```
 
-## The Learning Loop
+## Commands Reference
 
-```
-  CAPTURE → APPLY → VERIFY → EVOLVE → PROMOTE
-  /remember  /apply  (auto)   /audit   /promote
-```
+### For Users (inside an agent repo)
 
-1. **CAPTURE** — Agent detects corrections, patterns, decisions → saves to `memory/`
-2. **APPLY** — Before acting, agent recalls relevant memories → announces transparently
-3. **VERIFY** — User confirms or corrects → memory updated accordingly
-4. **EVOLVE** — Session-end audit identifies stale, missed, and promotion-ready memories
-5. **PROMOTE** — Well-proven memories (3+ applies, verified, multi-context) graduate to CLAUDE.md
+| Command | Description |
+|---------|-------------|
+| `/resume` | Start session — pull remote + load last handoff |
+| `/remember <slug>` | Save to memory (feedback, pattern, lesson, decision, etc.) |
+| `/recall <keyword>` | Search memory by keyword, type, or category |
+| `/apply <memory>` | Mark memory as applied + transparency announcement |
+| `/audit` | Session health report (applied, stale, promotion candidates) |
+| `/promote <memory>` | Graduate proven memory to CLAUDE.md hard rule |
+| `/handoff` | End session — audit + save + git commit + push |
 
-See [docs/LEARNING-LOOP.md](docs/LEARNING-LOOP.md) for the full architecture.
+### For Operators (managing the framework)
 
-## Wizard Flow
+| Command | Description |
+|---------|-------------|
+| `agent-init [dir]` | Scaffold a new agent in target directory |
+| `agent-install [dir]` | Install/update skills in an existing agent repo |
+| `agent-install-all` | Batch update all agent repos under ~/repos/ |
+| `agent-install-all --dry-run` | Preview which repos would be updated |
 
-The `/agent-init` wizard asks 6 freetext questions in one prompt:
+## Documentation
 
-1. Agent name
-2. Role / purpose
-3. Personality / tone
-4. Philosophy / hard rules
-5. Human name (workspace owner)
-6. Language preference
-
-AI parses answers → generates full persona + philosophy prose → creates all files → git commits.
-
-## Dual-Runtime Support
-
-| Runtime | Identity File | Skills Location | Status |
-|---------|--------------|-----------------|--------|
-| Claude Code | `CLAUDE.md` | `.claude/commands/agent-core/` | Full support |
-| Codex / Antigravity | `AGENTS.md` | `.claude/commands/agent-core/*.md` (read by agent) | Identity + memory structure; skills require reading .claude/commands/ files |
-
-Both files are generated from the same wizard answers. CLAUDE.md uses `/slash-commands`, AGENTS.md references skill files that codex-compatible tools can read for full procedures.
+| Document | Description |
+|----------|-------------|
+| [INSTALLATION.md](docs/INSTALLATION.md) | Setup, prerequisites, PATH integration |
+| [LEARNING-LOOP.md](docs/LEARNING-LOOP.md) | Architecture: why structural learning, 5-stage pipeline |
+| [CUSTOMIZATION.md](docs/CUSTOMIZATION.md) | Persona, language, custom skills, MCP integration |
 
 ## Inspired By
 
-- [awaken ritual](https://github.com/Soul-Brews-Studio) — Oracle birth wizard, psi/ brain filesystem
-- [agent-kk](../kk/agent-kk/) — KK's 5-stage learning loop, local memory system
-- [prp-framework](../agents/prp-framework/) — install-all pattern, CLAUDE.md injection
+| Source | What We Took |
+|--------|-------------|
+| [Oracle awaken ritual](https://github.com/Soul-Brews-Studio) | Wizard flow, batch freetext, brain filesystem concept |
+| [KK (agent-kk)](https://github.com/gobikom/agent-kk) | 5-stage learning loop, local memory system, 7 commands |
+| [PRP Framework](https://github.com/gobikom/prp-framework) | install-all pattern, CLAUDE.md injection, adapter model |
 
 ## License
 
-Internal — OpenClaw workspace tooling.
+MIT
