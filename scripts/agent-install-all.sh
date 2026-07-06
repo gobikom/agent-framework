@@ -32,6 +32,7 @@ echo ""
 
 COUNT=0
 UPDATED=0
+FAILED=0
 
 # Find repos with CLAUDE.md that contain agent identity markers
 while IFS= read -r claude_md; do
@@ -51,8 +52,12 @@ while IFS= read -r claude_md; do
             echo "  Would update: $repo_dir ($agent_name)"
         else
             echo "  Updating: $repo_dir ($agent_name)"
-            "$FRAMEWORK_DIR/scripts/agent-install.sh" "$repo_dir" 2>&1 | sed 's/^/    /'
-            UPDATED=$((UPDATED + 1))
+            if "$FRAMEWORK_DIR/scripts/agent-install.sh" "$repo_dir" 2>&1 | sed 's/^/    /'; then
+                UPDATED=$((UPDATED + 1))
+            else
+                echo "    FAILED: $repo_dir"
+                FAILED=$((FAILED + 1))
+            fi
             echo ""
         fi
     fi
@@ -63,4 +68,5 @@ if [ "$DRY_RUN" = true ]; then
     echo "Found $COUNT agent repos. Run without --dry-run to update."
 else
     echo "Updated $UPDATED/$COUNT agent repos."
+    [ "$FAILED" -gt 0 ] && echo "Failed: $FAILED repos (check output above)"
 fi

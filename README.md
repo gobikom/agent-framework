@@ -99,12 +99,12 @@ AI parses answers → generates full persona + philosophy prose → creates all 
 
 ## Dual-Runtime Support
 
-| Runtime | Identity File | Skills Location |
-|---------|--------------|-----------------|
-| Claude Code | `CLAUDE.md` | `.claude/commands/agent-core/` |
-| Codex / Antigravity | `AGENTS.md` | Inline instructions in AGENTS.md |
+| Runtime | Identity File | Skills Location | Status |
+|---------|--------------|-----------------|--------|
+| Claude Code | `CLAUDE.md` | `.claude/commands/agent-core/` | Full support |
+| Codex / Antigravity | `AGENTS.md` | `.claude/commands/agent-core/*.md` (read by agent) | Identity + memory structure; skills require reading .claude/commands/ files |
 
-Both files are generated from the same wizard answers. CLAUDE.md uses `/slash-commands`, AGENTS.md uses natural language equivalents.
+Both files are generated from the same wizard answers. CLAUDE.md uses `/slash-commands`, AGENTS.md references skill files that codex-compatible tools can read for full procedures.
 
 ## Inspired By
 

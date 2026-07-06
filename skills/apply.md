@@ -69,11 +69,12 @@ Example:
 
 If PERSONA_PARTICLE is set, incorporate it naturally into the announcement.
 
-### Step 4 — After action, prompt for verification
+### Step 4 — After action, observe verification
 
-After performing the action and the user responds:
-- If user does NOT correct -> no action needed (`verified_by_user: pending` will be resolved during `/audit`)
-- If user corrects or refines -> run `/remember` to update memory body + set `verified_by_user: no` + add Change Log entry
+After performing the action, observe the user's response:
+- If user **confirms or does not correct** -> set `verified_by_user: yes` in frontmatter
+- If user **corrects or refines** -> set `verified_by_user: no` + update memory body via `/remember` + add Change Log entry
+- If **no observable reaction** (conversation ended, topic changed) -> leave as `verified_by_user: pending` (resolved in next `/audit`)
 
 ### Step 5 — Add Change Log entry
 

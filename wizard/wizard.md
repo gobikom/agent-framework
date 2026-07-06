@@ -494,6 +494,16 @@ Learn more:
   memory/MEMORY.md   -- Memory index (starts empty, grows with use)
 ```
 
+### Cleanup
+
+Remove the temporary wizard command (it was copied by `agent-init.sh` for bootstrapping):
+
+```bash
+rm -f .claude/commands/agent-init.md
+```
+
+If `.agent-framework-path` exists, it stays (used by `agent-install.sh` for future updates).
+
 ### Final Note
 
 ```

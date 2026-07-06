@@ -44,19 +44,13 @@
 | `promote <memory>` | Graduate a memory entry to the agent identity file | 5. PROMOTE |
 | `handoff` | Audit + save + commit + push using the handoff command | 4. EVOLVE |
 
-> **Note for codex-compatible tools**: Commands above are built-in commands provided by the agent framework. Invoke them directly (e.g., `remember <slug>`) rather than as slash commands.
+> **Note for codex-compatible tools**: Full skill procedures are in `.claude/commands/agent-core/*.md`.
+> These files contain the step-by-step instructions for each command (file schemas, git safety checks, etc.).
+> Read the relevant skill file before executing a command. For Claude Code, these are loaded as slash commands automatically.
 
 ### Proactive Memory — AUTO
 
-| Trigger | Action |
-|---------|--------|
-| New session start | Read `memory/latest-handoff.md` — summarize before starting |
-| Important decision | Save to memory immediately — category: `decision` |
-| Reusable pattern found | Save to memory immediately — category: `pattern` |
-| Mistake or friction | Save to memory immediately — category: `lesson` |
-| User says "remember this" | Save to memory immediately — category per content |
-| End of session | Run handoff immediately |
-| Starting work on known topic | Search memory first — check for existing context |
+{{PROACTIVE_TRIGGERS_SECTION}}
 
 ### Memory Storage
 

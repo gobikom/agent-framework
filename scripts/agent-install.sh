@@ -3,7 +3,11 @@ set -euo pipefail
 
 FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_DIR="${1:-.}"
-TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd)"
+TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd)" || {
+    echo "Error: Directory '$1' does not exist."
+    echo "Usage: agent-install [target-directory]"
+    exit 1
+}
 
 echo "=== Agent Framework — Install/Update Skills ==="
 echo "Source: $FRAMEWORK_DIR"
