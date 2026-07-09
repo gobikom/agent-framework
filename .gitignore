@@ -1,0 +1,28 @@
+
+# PRP Framework - generated adapters (recreate with: cd .prp && ./scripts/install.sh)
+.claude/
+.claude-plugin/
+.codex/
+.opencode/
+.gemini/
+.agents/
+AGENTS.md
+
+# PRP artifacts — runtime state ignored, everything else trackable for GitHub links
+.prp-output/state/
+.prp-output/debug/
+.prp-output/ralph-archives/
+.prp-output/reviews/review-metrics.jsonl
+
+# PRP Framework - local clone (not a submodule)
+.prp/
+
+# Tool artifacts (agent sessions)
+.serena/
+.thclaws/
+
+# Compatibility stubs (auto-generated from AGENT.md — do not edit)
+CLAUDE.md
+
+# PRP framework scripts
+scripts/gen-ai-context.sh
