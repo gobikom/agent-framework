@@ -2,7 +2,13 @@
 set -euo pipefail
 shopt -s inherit_errexit
 
-FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+FRAMEWORK_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     echo "Usage: agent-init [target-directory]"
@@ -13,9 +19,9 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     exit 0
 fi
 
-# bash 4.0+ required (associative arrays / modern features used by the framework)
-if ((BASH_VERSINFO[0] < 4)); then
-    echo "Error: bash 4.0+ required (found ${BASH_VERSION}). On macOS: brew install bash"
+# bash 4.4+ required (inherit_errexit used for safe subshell error handling)
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
+    echo "Error: bash 4.4+ required (found ${BASH_VERSION}). On macOS: brew install bash"
     exit 1
 fi
 

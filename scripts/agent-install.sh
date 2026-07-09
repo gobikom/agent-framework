@@ -2,7 +2,18 @@
 set -euo pipefail
 shopt -s inherit_errexit
 
-FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
+    echo "Error: bash 4.4+ required (found ${BASH_VERSION}). On macOS: brew install bash" >&2
+    exit 1
+fi
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+FRAMEWORK_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 
 TARGET_DIR="."
 TARGETS_RAW=""
@@ -90,15 +101,20 @@ else
 fi
 
 # ---- md5 helper (Linux md5sum, macOS md5 -q fallback) ----
+# Check availability once at top level (not inside subshell where flag would be lost)
 MD5_UNAVAILABLE=false
+if ! command -v md5sum &>/dev/null && ! command -v md5 &>/dev/null; then
+    MD5_UNAVAILABLE=true
+    echo "Warning: no md5 utility found — conflict detection disabled, files will be overwritten on update" >&2
+fi
+
 md5_of() {
     if command -v md5sum &>/dev/null; then
         md5sum "$1" | awk '{print $1}'
     elif command -v md5 &>/dev/null; then
         md5 -q "$1"
     else
-        MD5_UNAVAILABLE=true
-        echo "no-md5-$1-$$-$RANDOM"
+        echo "no-md5-$1-$$"
     fi
 }
 
@@ -128,14 +144,17 @@ install_skill_file() {
                 if [ "$FORCE" = true ]; then
                     cp "$dest" "$dest.bak" || { echo "ERROR: could not back up $(basename "$dest") before overwrite (target: $TARGET_DIR)" >&2; return 1; }
                     echo "  WARNING: $(basename "$dest") has local modifications. Backed up to $(basename "$dest").bak and overwritten (--force)." >&2
-                else
+                elif [ -t 0 ]; then
                     local reply="n"
                     read -r -p "  WARNING: $(basename "$dest") has local modifications. Overwrite? [y/N] " reply || reply="n"
                     if [[ ! "$reply" =~ ^[Yy]$ ]]; then
-                        echo "  Skipped $(basename "$dest")" >&2
-                        return 0
+                        echo "  Skipped $(basename "$dest") (local modifications, user declined)" >&2
+                        return 2
                     fi
                     cp "$dest" "$dest.bak" || { echo "ERROR: could not back up $(basename "$dest") before overwrite (target: $TARGET_DIR)" >&2; return 1; }
+                else
+                    echo "  Skipped $(basename "$dest") (local modifications, non-interactive — use --force to overwrite)" >&2
+                    return 2
                 fi
             fi
         fi
@@ -145,17 +164,25 @@ install_skill_file() {
 }
 
 # Copies every skills/*.md from the framework into $1, returns count on stdout.
+# install_skill_file returns 0=installed, 1=error (fatal), 2=skipped (conflict).
 copy_skills_to() {
     local dest_dir="$1"
     mkdir -p "$dest_dir"
-    local count=0
+    local count=0 skipped=0
     for skill in "$FRAMEWORK_DIR/skills/"*.md; do
         [ -f "$skill" ] || continue
-        local filename
+        local filename rc=0
         filename="$(basename "$skill")"
-        install_skill_file "$skill" "$dest_dir/$filename"
-        count=$((count + 1))
+        install_skill_file "$skill" "$dest_dir/$filename" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            count=$((count + 1))
+        elif [ "$rc" -eq 2 ]; then
+            skipped=$((skipped + 1))
+        else
+            return 1
+        fi
     done
+    [ "$skipped" -gt 0 ] && echo "  ($skipped skill(s) skipped due to local modifications)" >&2
     echo "$count"
 }
 

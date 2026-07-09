@@ -460,7 +460,7 @@ fi
 Stage all created files and commit:
 
 ```bash
-git add CLAUDE.md AGENTS.md memory/ .claude/ docs/ .gitignore
+git add AGENT.md memory/ docs/ .gitignore
 git commit -m "feat: initialize agent -- AGENT_NAME (AGENT_ROLE)
 
 Created by agent-framework wizard.

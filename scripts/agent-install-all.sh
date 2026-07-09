@@ -2,13 +2,25 @@
 set -euo pipefail
 shopt -s inherit_errexit
 
-FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
+    echo "Error: bash 4.4+ required (found ${BASH_VERSION}). On macOS: brew install bash" >&2
+    exit 1
+fi
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+FRAMEWORK_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 DRY_RUN=false
 REPOS_DIR="${HOME}/repos"
 TARGET_ARG=""
+FORCE=false
 
 print_help() {
-    echo "Usage: agent-install-all [--dry-run] [--repos-dir=PATH] [--target=claude,cursor,codex,generic]"
+    echo "Usage: agent-install-all [--dry-run] [--repos-dir=PATH] [--target=LIST] [--force]"
     echo ""
     echo "Install/update agent-framework skills in all agent repos."
     echo ""
@@ -16,6 +28,7 @@ print_help() {
     echo "  --dry-run          Preview which repos would be updated"
     echo "  --repos-dir=PATH   Root directory to scan (default: ~/repos)"
     echo "  --target=LIST      Comma-separated install targets, passed through to agent-install.sh"
+    echo "  --force            Overwrite locally modified files (creates .bak backups)"
 }
 
 # Parse args
@@ -40,6 +53,10 @@ while [[ $# -gt 0 ]]; do
         --target)
             TARGET_ARG="${2:-}"
             shift 2
+            ;;
+        --force)
+            FORCE=true
+            shift
             ;;
         -h|--help)
             print_help
@@ -67,6 +84,7 @@ echo ""
 COUNT=0
 UPDATED=0
 FAILED=0
+FIND_ERRFILE=$(mktemp)
 
 # Find repos with an identity file (AGENT.md preferred, CLAUDE.md legacy
 # fallback) that contain agent identity markers. "AGENT.md" itself is a
@@ -101,6 +119,9 @@ while IFS= read -r repo_dir; do
             if [ -n "$TARGET_ARG" ]; then
                 install_args+=("--target" "$TARGET_ARG")
             fi
+            if [ "$FORCE" = true ]; then
+                install_args+=("--force")
+            fi
             if "$FRAMEWORK_DIR/scripts/agent-install.sh" "${install_args[@]}" 2>&1 | sed 's/^/    /'; then
                 UPDATED=$((UPDATED + 1))
             else
@@ -110,7 +131,13 @@ while IFS= read -r repo_dir; do
             echo ""
         fi
     fi
-done < <(find "$REPOS_DIR" -maxdepth 4 \( -name "CLAUDE.md" -o -name "AGENT.md" \) -type f -exec dirname {} \; 2>/dev/null | sort -u)
+done < <(find "$REPOS_DIR" -maxdepth 4 \( -name "CLAUDE.md" -o -name "AGENT.md" \) -type f -exec dirname {} \; 2>"$FIND_ERRFILE" | sort -u)
+
+if [ -s "$FIND_ERRFILE" ]; then
+    SCAN_ERRORS=$(wc -l < "$FIND_ERRFILE")
+    echo "Warning: $SCAN_ERRORS path(s) were unreadable during scan — some agent repos may have been skipped" >&2
+fi
+rm -f "$FIND_ERRFILE"
 
 echo ""
 if [ "$DRY_RUN" = true ]; then
