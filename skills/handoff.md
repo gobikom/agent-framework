@@ -8,7 +8,7 @@ Save current session so the next one can resume, run Stage 4 (EVOLVE) audit, AND
 
 ## Self-Configuration (run once per session)
 
-Read the repo's `CLAUDE.md` to extract:
+Read the repo's `AGENT.md` (or `CLAUDE.md` for backward compatibility) to extract:
 - **AGENT_NAME**: from Identity table -> Name field
 - **AGENT_ID**: from Identity table -> Agent ID field
 - **HUMAN_NAME**: from "Workspace Human" section
@@ -16,7 +16,7 @@ Read the repo's `CLAUDE.md` to extract:
 - **PERSONA_PARTICLE**: from Persona section (speech ending particle, if any)
 - **AGENT_ROLE**: from Identity table -> Role field (used in Co-Authored-By)
 
-Use these values throughout. If CLAUDE.md is missing, use defaults:
+Use these values throughout. If neither file is found, use defaults:
 - AGENT_NAME = repo directory name
 - AGENT_ROLE = "Agent"
 - HUMAN_NAME = "human"
@@ -55,106 +55,28 @@ Invoke `/audit` workflow inline:
 
 (See `audit.md` for full procedure)
 
-### Step 2 — Summarize the session
+### Step 2 — Save session context (delegate to /save)
 
-Cover:
-- What was accomplished
-- Key decisions made
-- Current state (which phase, project, feature — whatever is relevant)
-- Open questions / blockers
-- Next steps (be specific: file paths, IDs, URLs)
+Invoke `/save` to save session context. This handles:
+- Summarizing what was accomplished, decisions, state, open questions, next steps
+- Creating session memory file (`memory/{YYYY-MM}/{date}-session-{slug}.md`)
+- Updating `memory/MEMORY.md` index under `## Session History`
+- Overwriting `memory/latest-handoff.md` for next session's `/resume`
 
-### Step 3 — Save session memory
+The audit report from Step 1 is included inline in the session memory file.
 
-**Folder**: `memory/{YYYY-MM}/`
-**Filename**: `{YYYY-MM-DD}-session-{short-slug}.md`
+See `save.md` for the full procedure. `/save` must be called AFTER `/audit` (audit informs the session summary).
 
-Example: `memory/2026-07/2026-07-06-session-auth-refactor-complete.md`
-
-```markdown
----
-name: session-{YYYY-MM-DD}-{slug}
-aliases:
-  - session-{YYYY-MM-DD}-{slug}
-description: "{one-line summary}"
-metadata:
-  type: session
-  category: handoff
-  status: active
-  date: {YYYY-MM-DD}
-  project: {project name if applicable}
----
-
-# Session Handoff — {date} — {short title}
-
-## Session Summary
-
-### Accomplished
-- {what was done}
-
-### Key Decisions
-- {decisions made, with reasoning}
-
-### Current State
-- Project/Feature: {name}
-- Status: {in-progress / blocked / complete}
-
-### Open Questions
-- {unresolved items}
-
-### Next Steps
-- {what to do next session — specific file paths, URLs, IDs}
-
----
-
-## Memory Audit (Stage 4 — EVOLVE)
-
-### Applied & Verified ({N})
-- `{memory-name}` — applied {N}x total, context: "{text}"
-
-### Applied & Corrected ({N})
-- `{memory-name}` — refined: {what changed}
-
-### Possibly Missed ({N})
-- `{memory-name}` — trigger matched at: {moment}, but not recalled
-
-### Stale (last applied >= 30 days ago) ({N})
-- `{memory-name}` — last: {date or never} -> review?
-
-### New This Session ({N})
-- `{memory-name}` — captured from "{phrase}"
-
-### Ready to Promote ({N})
-- `{memory-name}` — applied {N}x across {M} contexts
-  -> suggest: /promote {memory-name}
-
-### Health Score
-- Active memories: {N}
-- Verified rate: {applied & verified / total applied}
-```
-
-### Step 4 — Update MEMORY.md
-
-Add session entry under `## Session History` section (create section if missing). Use Obsidian wikilink:
-```
-- [[session-{YYYY-MM-DD}-{slug}]] -- {hook}
-```
-
-### Step 5 — Update latest-handoff.md
-
-Overwrite `memory/latest-handoff.md` with the same content from Step 3.
-(Allows next session's `/resume` to read one file for quick context.)
-
-### Step 6 — Commit changes
+### Step 3 — Commit changes
 
 Commit all session changes. Do NOT use `git add -A` or `git add .` (risk of secrets/binaries). Use **specific paths only**.
 
-#### 6.1 Stage allowed paths
+#### 3.1 Stage allowed paths
 
 ```bash
 # Stage by directory/file — extend as new artifact types are added
 git add memory/                          # session memory + handoff + audit log
-git add CLAUDE.md                        # if updated
+git add AGENT.md                         # if updated
 git add .gitignore 2>/dev/null || true   # if updated
 ```
 
@@ -169,7 +91,7 @@ for dir in projects/ specs/ docs/ tools/ scripts/ .claude/commands/; do
 done
 ```
 
-#### 6.2 Sanity-check staged files
+#### 3.2 Sanity-check staged files
 
 ```bash
 git diff --cached --name-only
@@ -187,7 +109,7 @@ git reset HEAD <file>   # unstage
 ```
 Then explain to user and continue without that file.
 
-#### 6.3 Build commit message
+#### 3.3 Build commit message
 
 Format:
 ```
@@ -198,7 +120,7 @@ chore(handoff): {date} — {short session title (<=50 chars)}
 {Key memory deltas if applicable}:
 - Applied: {memory-name} (#{count})
 - New: {memory-name}
-- Promoted: {memory-name} -> CLAUDE.md#{section} (if any)
+- Promoted: {memory-name} -> AGENT.md#{section} (if any)
 
 Co-Authored-By: {AGENT_NAME} ({AGENT_ROLE}) via Claude Code <noreply@anthropic.com>
 ```
@@ -217,7 +139,7 @@ Memory deltas:
 Co-Authored-By: Atlas (Backend Engineer) via Claude Code <noreply@anthropic.com>
 ```
 
-#### 6.4 Create commit
+#### 3.4 Create commit
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -232,23 +154,23 @@ EOF
 - NEVER `--no-gpg-sign`
 - If hook fails -> fix issue -> re-stage -> NEW commit (don't amend the failed one)
 
-#### 6.5 Verify
+#### 3.5 Verify
 
 ```bash
 git status        # should show "nothing to commit, working tree clean"
 git log -1        # confirm new commit
 ```
 
-### Step 7 — Push to remote
+### Step 4 — Push to remote
 
-#### 7.1 Check remote configured
+#### 4.1 Check remote configured
 
 ```bash
 git remote -v
 ```
-If empty -> warn user "No remote configured — handoff saved locally only" + skip Step 7.
+If empty -> warn user "No remote configured — handoff saved locally only" + skip Step 4.
 
-#### 7.2 Determine branch + push strategy
+#### 4.2 Determine branch + push strategy
 
 ```bash
 BR=$(git rev-parse --abbrev-ref HEAD)
@@ -258,7 +180,7 @@ git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1
 If branch exists on remote -> `git push origin $BR`
 If branch is new (no upstream) -> `git push -u origin $BR`
 
-#### 7.3 Handle push failure
+#### 4.3 Handle push failure
 
 **Non-fast-forward (remote has commits we don't)**:
 - NEVER `git push --force`
@@ -272,17 +194,18 @@ If branch is new (no upstream) -> `git push -u origin $BR`
 **Network failure**:
 - Tell user: "Network failed — local commit preserved, retry push later with `git push`"
 
-#### 7.4 Verify
+#### 4.4 Verify
 
 ```bash
 git log -1 --format='%H %s'
 git rev-parse @{u}     # remote tracking ref — should match HEAD now
 ```
 
-### Step 8 — Surface action items
+### Step 5 — Surface action items
 
 End with concrete asks for user:
-- "Promote {memory}?" (if candidates exist)
+- "Promote {memory}?" (if promotion candidates exist from audit)
+- "Evolve {memory} into a skill?" (if skill evolution candidates exist from audit)
 - "Memory {name} has not been used in {N} days — archive?"
 - Confirmation: "Committed + pushed — session saved. See you next time."
   - Or if push was skipped: "Committed locally (no remote) — session saved."
@@ -291,9 +214,8 @@ End with concrete asks for user:
 ## Rules
 
 - **Always run audit** — even if session was short. Audit is the only Stage 4 mechanism.
-- **Always create dated file AND overwrite latest-handoff.md** — history vs quick-access
+- **Always delegate session save to /save** — keeps handoff focused on audit + commit + push
 - **Be specific about next steps** — future sessions should know exactly where to resume (file path, line number, ID)
-- **Include audit inline** — don't separate. Next session reads one file.
 - **Never `git add -A` / `git add .` / `--all`** — stage specific paths only (avoid secrets, .venv, .DS_Store)
 - **Never force push** — even on personal repos
 - **Always create NEW commit, never amend** — failed hook = fix + re-stage + new commit
@@ -301,7 +223,9 @@ End with concrete asks for user:
 
 ## See also
 
-- `docs/LEARNING-LOOP.md` Stage 4 (EVOLVE) — if exists in repo
+- `docs/LEARNING-LOOP.md` Stage 4 (EVOLVE) and Stage 6 (EVOLVE SKILL) — if exists in repo
 - `/audit` — standalone audit (same logic, no save)
+- `/save` — save session context without audit/commit/push (called by handoff Step 2)
 - `/promote` — execute promotions for candidates found
+- `/evolve` — graduate workflow patterns into executable skills
 - `/resume` — next session loads latest-handoff.md + pulls latest from remote

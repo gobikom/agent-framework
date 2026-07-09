@@ -8,14 +8,14 @@ Save something important to this agent's local memory using the Learning Loop sc
 
 ## Self-Configuration (run once per session)
 
-Read the repo's `CLAUDE.md` to extract:
+Read the repo's `AGENT.md` (or `CLAUDE.md` for backward compatibility) to extract:
 - **AGENT_NAME**: from Identity table -> Name field (e.g. "KK", "PSak", "Atlas")
 - **AGENT_ID**: from Identity table -> Agent ID field (e.g. "kk", "psak", "atlas")
 - **HUMAN_NAME**: from "Workspace Human" section (the person operating this workspace)
 - **LANGUAGE**: from Identity table or default English
 - **PERSONA_PARTICLE**: from Persona section (speech ending particle, if any — e.g. a cat agent might end with a specific word)
 
-Use these values throughout. If CLAUDE.md is missing or has no Identity table, use defaults:
+Use these values throughout. If neither file is found or has no Identity table, use defaults:
 - AGENT_NAME = repo directory name
 - HUMAN_NAME = "human"
 - LANGUAGE = English
@@ -25,7 +25,7 @@ Use these values throughout. If CLAUDE.md is missing or has no Identity table, u
 
 - `$ARGUMENTS` provided — save that content
 - Empty — ask user what to remember
-- **Auto-triggered** by Phrase Triggers defined in CLAUDE.md "Proactive Memory" table (if present) — agent saves without being asked
+- **Auto-triggered** by Phrase Triggers defined in AGENT.md "Proactive Memory" table (if present) — agent saves without being asked
 
 ### Common Phrase Triggers (detect and auto-save)
 
@@ -85,7 +85,7 @@ metadata:
   last_applied: null
   last_context: null
   verified_by_user: pending  # yes | no | pending
-  promoted_to: null          # null | "CLAUDE.md#section"
+  promoted_to: null          # null | "AGENT.md#section"
 ---
 
 # {Title}
@@ -153,7 +153,25 @@ Suggested section mapping:
 
 Format: `- [[{type}-{slug}]] -- {one-line hook}` (Obsidian wikilink resolves via `aliases`)
 
-Add `**promoted to CLAUDE.md**` marker if `promoted_to` is set.
+Add `**promoted to AGENT.md**` marker if `promoted_to` is set.
+
+### Step 4.5 — Proactive skill evolution detection
+
+When saving a `pattern` type entry, check if this could become a reusable skill:
+
+1. Count actionable steps in the "How to apply" section being saved
+2. If >= 3 steps:
+   - Search existing memories for similar patterns: `grep -rli "category: {same-category}" memory/ --include="*.md"`
+   - For each match with `type: pattern` and `applied_count >= 2`, check if "How to apply" has overlapping step keywords
+   - If a similar multi-step pattern is found, suggest proactively (advisory only — never auto-create):
+     ```
+     This looks like a repeated workflow. Combined with [[existing-pattern]],
+     this could become a reusable skill.
+     Want me to draft a skill? (run /evolve {suggested-name})
+     ```
+3. If < 3 steps: skip silently (it's a rule, not a workflow)
+
+The keyword overlap check is a hint, not a gate — false positives are acceptable because the user decides. False negatives are preferred over false auto-creation.
 
 ### Step 5 — Link related memories
 
@@ -170,7 +188,7 @@ Report to user:
 - **One memory per file** — don't append to existing memory files
 - **Check for duplicates** in MEMORY.md before creating — update existing if same topic
 - **MEMORY.md entries < 150 chars** (index file, keep concise)
-- **Language**: match content language (use the language from CLAUDE.md Identity, or match whatever language the user used)
+- **Language**: match content language (use the language from AGENT.md Identity, or match whatever language the user used)
 - **Wikilinks** use `[[name]]` (Obsidian compatible) — both in index AND inline body. Add `aliases` in frontmatter so `[[short-slug]]` resolves correctly even when filename has date prefix.
 - **Frontmatter** must be valid YAML — quote strings with `:` or special chars
 - **Status default** = `active`. Never delete old memory — set `status: superseded` + `superseded_by: "[[new-memory]]"`
@@ -183,4 +201,5 @@ Report to user:
 - `memory/_template/pattern-template.md` — pattern schema
 - `/apply` — use a memory entry (Stage 2)
 - `/audit` — review memory health (Stage 4)
-- `/promote` — promote memory to CLAUDE.md Hard Rule (Stage 5)
+- `/promote` — promote memory to AGENT.md Hard Rule (Stage 5)
+- `/evolve` — graduate workflow pattern into executable skill (Stage 6)

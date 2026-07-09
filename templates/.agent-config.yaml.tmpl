@@ -1,0 +1,13 @@
+# Agent Framework Configuration
+# Copy to .agent-config.yaml in your agent repo to customize.
+
+learning_loop:
+  promotion_threshold: 3        # applied_count needed for promotion
+  evolution_threshold: 3        # applied_count needed for skill evolution
+  stale_days: 30                # days without apply before flagged stale
+  max_recall_results: 5         # max results from /recall
+  auto_audit_on_handoff: true   # run /audit during /handoff
+
+identity:
+  file: AGENT.md                # primary identity file name
+  budget: "5.00 USD"            # default budget per session
