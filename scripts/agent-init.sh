@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s inherit_errexit
 
 FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -50,16 +51,22 @@ if [ -f "$TARGET_DIR/AGENT.md" ] || [ -f "$TARGET_DIR/CLAUDE.md" ]; then
     existing_file="AGENT.md"
     [ -f "$TARGET_DIR/AGENT.md" ] || existing_file="CLAUDE.md"
     echo "Warning: $existing_file already exists in $TARGET_DIR"
-    read -p "Overwrite? [y/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborted."
-        exit 0
+    if [ -t 0 ]; then
+        read -p "Overwrite? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Aborted."
+            exit 0
+        fi
+    else
+        echo "Error: $existing_file exists and no interactive terminal to confirm overwrite." >&2
+        echo "Delete or rename $existing_file first, then re-run." >&2
+        exit 1
     fi
 fi
 
-# Save framework path + version for the wizard to find templates
-echo "$FRAMEWORK_DIR $(cat "$FRAMEWORK_DIR/VERSION" 2>/dev/null || echo unknown)" > "$TARGET_DIR/.agent-framework-path"
+# Save framework path for the wizard to find templates
+echo "$FRAMEWORK_DIR" > "$TARGET_DIR/.agent-framework-path"
 
 # Always install the wizard as a plain instruction file at the project root
 # so any AI coding assistant can run it (tool-agnostic).

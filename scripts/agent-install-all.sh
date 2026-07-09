@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s inherit_errexit
 
 FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DRY_RUN=false
@@ -50,6 +51,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ ! -d "$REPOS_DIR" ]; then
+    echo "Error: --repos-dir '$REPOS_DIR' does not exist." >&2
+    exit 1
+fi
 
 echo "=== Agent Framework — Install All ==="
 echo "Framework: $FRAMEWORK_DIR"

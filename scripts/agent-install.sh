@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s inherit_errexit
 
 FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -89,13 +90,15 @@ else
 fi
 
 # ---- md5 helper (Linux md5sum, macOS md5 -q fallback) ----
+MD5_UNAVAILABLE=false
 md5_of() {
     if command -v md5sum &>/dev/null; then
         md5sum "$1" | awk '{print $1}'
     elif command -v md5 &>/dev/null; then
         md5 -q "$1"
     else
-        echo "no-md5-available"
+        MD5_UNAVAILABLE=true
+        echo "no-md5-$1-$$-$RANDOM"
     fi
 }
 
@@ -113,7 +116,9 @@ install_skill_file() {
         src_hash="$(md5_of "$src")"
         dest_hash="$(md5_of "$dest")"
 
-        if [ "$src_hash" != "$dest_hash" ]; then
+        if [ "$MD5_UNAVAILABLE" = true ]; then
+            echo "  Warning: no md5 utility found — cannot detect local modifications, overwriting $(basename "$dest")" >&2
+        elif [ "$src_hash" != "$dest_hash" ]; then
             local modified_after_install=true
             if [ -f "$STAMP_FILE" ] && [ ! "$dest" -nt "$STAMP_FILE" ]; then
                 modified_after_install=false
@@ -121,22 +126,22 @@ install_skill_file() {
 
             if [ "$modified_after_install" = true ]; then
                 if [ "$FORCE" = true ]; then
-                    cp "$dest" "$dest.bak"
-                    echo "  WARNING: $(basename "$dest") has local modifications. Backed up to $(basename "$dest").bak and overwritten (--force)."
+                    cp "$dest" "$dest.bak" || { echo "ERROR: could not back up $(basename "$dest") before overwrite (target: $TARGET_DIR)" >&2; return 1; }
+                    echo "  WARNING: $(basename "$dest") has local modifications. Backed up to $(basename "$dest").bak and overwritten (--force)." >&2
                 else
                     local reply="n"
                     read -r -p "  WARNING: $(basename "$dest") has local modifications. Overwrite? [y/N] " reply || reply="n"
                     if [[ ! "$reply" =~ ^[Yy]$ ]]; then
-                        echo "  Skipped $(basename "$dest")"
+                        echo "  Skipped $(basename "$dest")" >&2
                         return 0
                     fi
-                    cp "$dest" "$dest.bak"
+                    cp "$dest" "$dest.bak" || { echo "ERROR: could not back up $(basename "$dest") before overwrite (target: $TARGET_DIR)" >&2; return 1; }
                 fi
             fi
         fi
     fi
 
-    cp "$src" "$dest"
+    cp "$src" "$dest" || { echo "ERROR: failed to install $(basename "$dest")" >&2; return 1; }
 }
 
 # Copies every skills/*.md from the framework into $1, returns count on stdout.
@@ -219,6 +224,7 @@ for raw_target in "${TARGET_LIST[@]:-}"; do
             n=$(copy_skills_to "$TARGET_DIR/.cursor/rules/agent-core")
             INSTALLED=$((INSTALLED + n))
             echo "  Installed $n skills -> .cursor/rules/agent-core/"
+            generate_stub ".cursorrules"
             ;;
         generic)
             echo "Installing target: generic"
@@ -237,8 +243,11 @@ done
 if [ -d "$TARGET_DIR/memory" ]; then
     echo "Updating memory templates..."
     mkdir -p "$TARGET_DIR/memory/_template"
-    cp "$FRAMEWORK_DIR/templates/memory/_template/"*.md "$TARGET_DIR/memory/_template/" 2>/dev/null || true
-    echo "  Templates updated"
+    if cp "$FRAMEWORK_DIR/templates/memory/_template/"*.md "$TARGET_DIR/memory/_template/" 2>/dev/null; then
+        echo "  Templates updated"
+    else
+        echo "  WARNING: failed to update memory templates" >&2
+    fi
 fi
 
 # Install docs
