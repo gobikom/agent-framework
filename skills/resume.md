@@ -8,14 +8,14 @@ Resume from the last session: **pull latest from remote first** (so the agent do
 
 ## Self-Configuration (run once per session)
 
-Read the repo's `CLAUDE.md` to extract:
+Read the repo's `AGENT.md` (or `CLAUDE.md` for backward compatibility) to extract:
 - **AGENT_NAME**: from Identity table -> Name field
 - **AGENT_ID**: from Identity table -> Agent ID field
 - **HUMAN_NAME**: from "Workspace Human" section
 - **LANGUAGE**: from Identity table or default English
 - **PERSONA_PARTICLE**: from Persona section (speech ending particle, if any)
 
-Use these values throughout. If CLAUDE.md is missing, use defaults:
+Use these values throughout. If neither file is found, use defaults:
 - AGENT_NAME = repo directory name
 - HUMAN_NAME = "human"
 
@@ -113,7 +113,7 @@ Ask if the user wants to continue from where things left off, or start fresh.
 
 - **Always read the actual file**, don't guess from memory
 - **Keep the summary concise** — 5-8 lines max
-- **Use the agent's persona** (from CLAUDE.md Persona section) in the summary
+- **Use the agent's persona** (from AGENT.md Persona section) in the summary
 - **Pull only if clean local + fast-forward possible** — never silently merge/rebase
 - **Never force-pull** (`git reset --hard origin/<branch>`) — would lose local work
 - **If pull fails or conflicts** -> stop + ask user (don't try clever recovery)

@@ -8,21 +8,21 @@ Search this agent's local memory for relevant context.
 
 ## Self-Configuration (run once per session)
 
-Read the repo's `CLAUDE.md` to extract:
+Read the repo's `AGENT.md` (or `CLAUDE.md` for backward compatibility) to extract:
 - **AGENT_NAME**: from Identity table -> Name field
 - **AGENT_ID**: from Identity table -> Agent ID field
 - **HUMAN_NAME**: from "Workspace Human" section
 - **LANGUAGE**: from Identity table or default English
 - **PERSONA_PARTICLE**: from Persona section (speech ending particle, if any)
 
-Use these values throughout. If CLAUDE.md is missing, use defaults:
+Use these values throughout. If neither file is found, use defaults:
 - AGENT_NAME = repo directory name
 - HUMAN_NAME = "human"
 
 ## When to Use
 
 - User asks about past decisions, patterns, or lessons
-- Before performing an action that has a matching memory category (see CLAUDE.md Learning Loop Stage 2 if present)
+- Before performing an action that has a matching memory category (see AGENT.md Learning Loop Stage 2 if present)
 - User says "what did we decide about...", "how did we handle...", "remember when..."
 - Empty `$ARGUMENTS` — show the full MEMORY.md index
 

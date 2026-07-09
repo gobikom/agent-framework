@@ -8,21 +8,21 @@ Mark a memory entry as "applied" — bump tracking counters + provide transparen
 
 ## Self-Configuration (run once per session)
 
-Read the repo's `CLAUDE.md` to extract:
+Read the repo's `AGENT.md` (or `CLAUDE.md` for backward compatibility) to extract:
 - **AGENT_NAME**: from Identity table -> Name field
 - **AGENT_ID**: from Identity table -> Agent ID field
 - **HUMAN_NAME**: from "Workspace Human" section
 - **LANGUAGE**: from Identity table or default English
 - **PERSONA_PARTICLE**: from Persona section (speech ending particle, if any)
 
-Use these values throughout. If CLAUDE.md is missing, use defaults:
+Use these values throughout. If neither file is found, use defaults:
 - AGENT_NAME = repo directory name
 - HUMAN_NAME = "human"
 
 ## When to Use
 
 - The agent is about to perform an action that matches a memory entry's trigger
-- Auto-triggered by the Action-to-Recall map defined in CLAUDE.md Learning Loop Stage 2 (if present)
+- Auto-triggered by the Action-to-Recall map defined in AGENT.md Learning Loop Stage 2 (if present)
 - User explicitly asks to apply a specific memory
 
 ## Arguments

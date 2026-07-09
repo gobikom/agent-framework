@@ -1,5 +1,5 @@
 ---
-description: "Create a new persistent AI agent — interactive wizard with memory, learning loop, and dual-runtime support"
+description: "Create a new persistent AI agent — interactive wizard with memory, learning loop, and tool-agnostic runtime support"
 argument-hint: "[--minimal]"
 ---
 
@@ -7,7 +7,7 @@ argument-hint: "[--minimal]"
 
 > Scaffold a persistent AI agent with identity, memory, and learning loop.
 
-Run this command inside the target repo directory. The wizard gathers agent identity through a single freetext prompt, asks about memory preferences, then builds all files.
+Run this command inside the target repo directory. Works as a Claude Code slash command (`/agent-init`) AND as a plain instruction doc — paste "Follow the instructions in WIZARD.md" into any AI coding assistant (Cursor, Codex, Windsurf, Aider, etc.) to run the same flow. The wizard gathers agent identity through a single freetext prompt, asks about memory preferences, then builds all files, generating a single universal `AGENT.md` plus compatibility stubs for whichever tools are detected.
 
 ## Flow Overview
 
@@ -47,12 +47,18 @@ fi
 Verify the framework has the required files:
 
 ```bash
-for f in templates/CLAUDE.md.tmpl templates/AGENTS.md.tmpl templates/memory/MEMORY.md.tmpl skills/remember.md; do
+for f in templates/AGENT.md.tmpl templates/memory/MEMORY.md.tmpl skills/remember.md; do
   [ -f "$FRAMEWORK_DIR/$f" ] || echo "WARNING: missing $FRAMEWORK_DIR/$f"
 done
 ```
 
-Store `FRAMEWORK_DIR` for use in Phase 4.
+Read the framework version (used later to stamp the generated `AGENT.md` footer):
+
+```bash
+FRAMEWORK_VERSION="$(cat "$FRAMEWORK_DIR/VERSION" 2>/dev/null || echo "unknown")"
+```
+
+Store `FRAMEWORK_DIR` and `FRAMEWORK_VERSION` for use in Phase 4.
 
 ---
 
@@ -68,28 +74,35 @@ Run ALL checks silently, then display a single results panel. No user interactio
 | 2 | Git repo | `git rev-parse --is-inside-work-tree 2>/dev/null` | Offer: "No git repo found. Initialize one? [Y/n]" — if yes, run `git init` |
 | 3 | Git identity — name | `git config user.name` | Ask: "What name should git use for commits?" — run `git config user.name "<answer>"` |
 | 4 | Git identity — email | `git config user.email` | Ask: "What email should git use for commits?" — run `git config user.email "<answer>"` |
-| 5 | Existing identity files | Check for `CLAUDE.md` and/or `AGENTS.md` in repo root | If found, warn: "Existing CLAUDE.md / AGENTS.md detected. The wizard will overwrite these. Continue? [y/N]" — default NO to protect existing work |
+| 5 | Existing identity files | Check for `AGENT.md` (primary) and, for backward compat, `CLAUDE.md` / `AGENTS.md` in repo root | If any found, warn: "Existing AGENT.md / CLAUDE.md / AGENTS.md detected. The wizard will overwrite these. Continue? [y/N]" — default NO to protect existing work |
 
 ### Runtime Detection
 
-Detect which runtimes are available or configured in this repo:
+Detect which runtimes are configured in this repo. Unlike v1, there is no "default to Claude + Codex" fallback — the wizard detects what's actually present and always includes the tool-neutral `generic` target.
 
 ```bash
 HAS_CLAUDE_CODE="no"
+HAS_CURSOR="no"
 HAS_CODEX="no"
 
-# Claude Code: .claude/ directory or CLAUDE.md
-[ -d ".claude" ] || [ -f "CLAUDE.md" ] && HAS_CLAUDE_CODE="yes"
+# Claude Code: .claude/ directory
+[ -d ".claude" ] && HAS_CLAUDE_CODE="yes"
 
-# Codex: .codex/ directory or AGENTS.md
-[ -d ".codex" ] || [ -f "AGENTS.md" ] && HAS_CODEX="yes"
+# Cursor: .cursor/ directory
+[ -d ".cursor" ] && HAS_CURSOR="yes"
 
-# If neither detected yet (fresh repo), default to both
-if [ "$HAS_CLAUDE_CODE" = "no" ] && [ "$HAS_CODEX" = "no" ]; then
-  HAS_CLAUDE_CODE="yes"
-  HAS_CODEX="yes"
-fi
+# Codex: .codex/ directory
+[ -d ".codex" ] && HAS_CODEX="yes"
+
+# Build the detected-runtimes list; "generic" is always included so that
+# AGENT.md + skills/ work with any tool even when nothing is detected.
+DETECTED_RUNTIMES="generic"
+[ "$HAS_CLAUDE_CODE" = "yes" ] && DETECTED_RUNTIMES="claude,$DETECTED_RUNTIMES"
+[ "$HAS_CURSOR" = "yes" ] && DETECTED_RUNTIMES="cursor,$DETECTED_RUNTIMES"
+[ "$HAS_CODEX" = "yes" ] && DETECTED_RUNTIMES="codex,$DETECTED_RUNTIMES"
 ```
+
+Fresh/empty repos (none of `.claude/`, `.cursor/`, `.codex/` present) get `DETECTED_RUNTIMES="generic"` only — the wizard no longer assumes Claude Code + Codex by default. A user can still request a specific target later via `agent-install --target claude|cursor|codex|generic`.
 
 ### Display Results
 
@@ -100,9 +113,9 @@ fi
   Repo:       yes (branch: main)
   Identity:   Alex <alex@example.com>
   Existing:   (none)
-  Runtimes:   Claude Code + Codex
+  Runtimes:   claude, generic   (detected runtimes + generic fallback)
 
-  Framework:  ~/repos/agents/agent-framework
+  Framework:  ~/repos/agents/agent-framework  (v2.0.0)
 
 All clear — starting wizard.
 ```
@@ -256,7 +269,7 @@ Display all gathered info in a structured summary. This is the last gate before 
 | Budget:      5.00 USD            |
 | Memory:      Full learning loop  |
 | Auto-audit:  Yes                 |
-| Runtimes:    Claude Code + Codex |
+| Runtimes:    claude, generic     |
 +----------------------------------+
 
 Create this agent? [Y/n/edit]
@@ -293,6 +306,7 @@ Source files from `$FRAMEWORK_DIR/templates/memory/`. Copy each file, replacing 
 |--------|-------------|
 | `templates/memory/MEMORY.md.tmpl` | `memory/MEMORY.md` |
 | `templates/memory/_promotions.md.tmpl` | `memory/_promotions.md` |
+| `templates/memory/_evolutions.md.tmpl` | `memory/_evolutions.md` |
 | `templates/memory/latest-handoff.md` | `memory/latest-handoff.md` |
 | `templates/memory/_template/feedback-template.md` | `memory/_template/feedback-template.md` |
 | `templates/memory/_template/pattern-template.md` | `memory/_template/pattern-template.md` |
@@ -302,11 +316,19 @@ For each file:
 2. Replace all `{{AGENT_NAME}}` occurrences with the actual agent name
 3. Write to the destination in the current repo
 
-If `memory_mode` is `minimal`, still create `memory/MEMORY.md` and `memory/latest-handoff.md` (needed for `/resume` and `/handoff`), but skip `_promotions.md` and `_template/` (not needed without full learning loop).
+If `memory_mode` is `minimal`, still create `memory/MEMORY.md` and `memory/latest-handoff.md` (needed for `/resume` and `/handoff`), but skip `_promotions.md`, `_evolutions.md`, and `_template/` (not needed without full learning loop).
 
-### Step 3: Generate CLAUDE.md
+Also copy the config template (regardless of `memory_mode` — thresholds apply even to minimal setups):
 
-Read `$FRAMEWORK_DIR/templates/CLAUDE.md.tmpl` as a base. Replace all `{{VARIABLES}}` with wizard values.
+| Source | Destination |
+|--------|-------------|
+| `templates/.agent-config.yaml.tmpl` | `.agent-config.yaml` |
+
+Read `$FRAMEWORK_DIR/templates/.agent-config.yaml.tmpl`, write it verbatim to `.agent-config.yaml` in the new agent repo (no variable substitution needed — it's already tool-neutral defaults the human can edit later).
+
+### Step 3: Generate AGENT.md
+
+Read `$FRAMEWORK_DIR/templates/AGENT.md.tmpl` as a base. Replace all `{{VARIABLES}}` with wizard values.
 
 **Variable replacement table:**
 
@@ -322,6 +344,7 @@ Read `$FRAMEWORK_DIR/templates/CLAUDE.md.tmpl` as a base. Replace all `{{VARIABL
 | `{{CAPABILITIES_SECTION}}` | **AI-generated list** — inferred capabilities from role, formatted as bullet points. |
 | `{{PROACTIVE_TRIGGERS_SECTION}}` | **AI-generated table** — proactive memory triggers appropriate for the role. Use the same table format as the template but with role-specific triggers. |
 | `{{BUDGET}}` | `budget` value (default "5.00 USD") |
+| `{{VERSION}}` | `FRAMEWORK_VERSION` (read from `$FRAMEWORK_DIR/VERSION` during Initialization) |
 
 **Important**: The `{{PERSONA_SECTION}}`, `{{PHILOSOPHY_SECTION}}`, `{{CAPABILITIES_SECTION}}`, and `{{PROACTIVE_TRIGGERS_SECTION}}` are NOT literal string replacements. The AI must write original prose and content based on the wizard answers. The template provides structure; the AI provides the substance.
 
@@ -330,27 +353,32 @@ If `memory_mode` is `minimal`, strip the full "Memory System" section from the t
 ```markdown
 ## Memory System
 
-> Minimal session continuity — `/resume` to start, `/handoff` to end.
+> Minimal session continuity — `resume` to start, `handoff` to end.
 
 | Command | Action |
 |---------|--------|
-| `/resume` | Pull + load last handoff |
-| `/handoff` | Save session + commit + push |
+| `resume` | Pull + load last handoff |
+| `handoff` | Save session + commit + push |
 ```
 
-Write the completed CLAUDE.md to the repo root.
+Write the completed content to `AGENT.md` in the repo root. `AGENT.md` is tool-neutral — commands are referenced by plain name (`remember`, `recall`, `apply`, `audit`, `promote`, `evolve`, `supersede`, `archive`, `save`, `handoff`), never with a leading slash, so the same file reads correctly whether it's opened by Claude Code, Cursor, Codex, or a human.
 
-**Overwrite guard**: If CLAUDE.md already exists and the user confirmed overwrite in Phase 0, proceed. If Phase 0 was not reached (should not happen) or the user did not confirm, do NOT overwrite — abort and report.
+**Overwrite guard**: If `AGENT.md` (or a legacy `CLAUDE.md`/`AGENTS.md`) already exists and the user confirmed overwrite in Phase 0, proceed. If Phase 0 was not reached (should not happen) or the user did not confirm, do NOT overwrite — abort and report.
 
-### Step 4: Generate AGENTS.md
+### Step 4: Generate tool-specific compatibility stubs
 
-Read `$FRAMEWORK_DIR/templates/AGENTS.md.tmpl` as a base. Apply the same variable replacements as Step 3.
+`AGENT.md` is always the primary, single source of truth. There is no separate "generate AGENTS.md" step anymore — instead, based on `DETECTED_RUNTIMES` from Phase 0, generate a compatibility stub per detected runtime by following the matching adapter in `$FRAMEWORK_DIR/templates/adapters/`:
 
-The AGENTS.md template already adapts command references for codex-compatible tools (no slash prefixes, natural language descriptions). Apply the same persona/philosophy/capabilities content.
+| Detected runtime | Adapter | Stub generated | How |
+|-------------------|---------|-----------------|-----|
+| `claude` | `templates/adapters/claude.md` | `CLAUDE.md` | Real file **copy** of `AGENT.md` with an auto-generated header — Claude Code requires this exact filename and does not read `AGENT.md` directly. NOT a symlink (symlinks are unreliable across filesystems/sandboxes). |
+| `codex` | `templates/adapters/codex.md` | `AGENTS.md` | Copy of `AGENT.md` content with command syntax adapted to codex conventions (plain `remember`, no slash), plus the codex reader note. |
+| `cursor` | `templates/adapters/cursor.md` | `.cursorrules` | A reference/pointer file generated from the AGENT.md sections per the cursor adapter instructions. |
+| `generic` | `templates/adapters/generic.md` | `AGENTS.md` (if not already created by the codex branch) | Same stub-generation approach as codex, for any tool that expects an `AGENTS.md`-style file. |
 
-If `memory_mode` is `minimal`, apply the same minimal memory section adaptation.
+For each stub, follow the exact commands documented in the corresponding adapter file (e.g. for Claude: `{ echo '<!-- Auto-generated from AGENT.md by agent-framework. Edit AGENT.md, not this file. -->'; cat AGENT.md; } > CLAUDE.md`). Stubs are derived artifacts — never hand-edited, regenerated on every wizard run and every `agent-install --target <tool>` run, and should be gitignored (see Step 7).
 
-Write the completed AGENTS.md to the repo root.
+If `DETECTED_RUNTIMES` is `generic` only (no specific tool detected), still generate the `AGENTS.md` stub via the generic adapter so non-Claude, non-Codex tools have something readable, but skip the Claude/Codex-specific stubs.
 
 ### Step 5: Install skills to .claude/commands/agent-core/
 
@@ -368,7 +396,7 @@ For each skill file:
 1. Read from `$FRAMEWORK_DIR/skills/<name>.md`
 2. Write to `.claude/commands/agent-core/<name>.md`
 
-Do NOT modify skill content — skills are designed to be agent-agnostic (they read agent identity from CLAUDE.md at runtime via self-configuration).
+Do NOT modify skill content — skills are designed to be agent-agnostic (they read agent identity from `AGENT.md` at runtime via self-configuration, falling back to `CLAUDE.md` for backward compatibility with pre-v2 agents).
 
 ### Step 6: Create docs/
 
@@ -384,15 +412,16 @@ If it does not exist, create a minimal placeholder:
 # Learning Loop
 
 > Architecture documentation for the agent's persistent memory system.
-> See CLAUDE.md "Memory System" section for available commands.
+> See AGENT.md "Memory System" section for available commands.
 
-## 5 Stages
+## 6 Stages
 
-1. **CAPTURE** (`/remember`) — Save lessons, patterns, decisions, feedback
-2. **APPLY** (`/recall` + `/apply`) — Search memory before acting, announce when applying a lesson
+1. **CAPTURE** (`remember`) — Save lessons, patterns, decisions, feedback
+2. **APPLY** (`recall` + `apply`) — Search memory before acting, announce when applying a lesson
 3. **VERIFY** — Track whether applied lessons were confirmed or corrected by the user
-4. **EVOLVE** (`/audit`) — Session-end health check of memory entries
-5. **PROMOTE** (`/promote`) — Graduate battle-tested lessons to CLAUDE.md hard rules
+4. **EVOLVE** (`audit`) — Session-end health check of memory entries
+5. **PROMOTE** (`promote`) — Graduate battle-tested lessons to AGENT.md hard rules
+6. **EVOLVE SKILL** (`evolve`) — Graduate a repeated multi-step workflow into an executable skill
 
 ## Criteria for Promotion
 
@@ -417,6 +446,11 @@ if ! grep -q "Agent framework" .gitignore 2>/dev/null; then
 
 # Agent framework (installed, not tracked)
 .claude/commands/agent-core/
+
+# Agent framework (auto-generated compatibility stubs — AGENT.md is the source of truth)
+CLAUDE.md
+AGENTS.md
+.cursorrules
 EOF
 fi
 ```
@@ -426,7 +460,7 @@ fi
 Stage all created files and commit:
 
 ```bash
-git add CLAUDE.md AGENTS.md memory/ .claude/ docs/ .gitignore
+git add AGENT.md memory/ docs/ .gitignore
 git commit -m "feat: initialize agent -- AGENT_NAME (AGENT_ROLE)
 
 Created by agent-framework wizard.

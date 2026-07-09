@@ -6,7 +6,7 @@
 |-------------|---------|-------|
 | **git** | any | `git --version` |
 | **bash** | 4.0+ | `bash --version` |
-| **Claude Code** (or Codex) | any | `claude --version` or IDE extension |
+| **AI coding assistant** | any | Claude Code, Cursor, Codex, or similar |
 
 No other dependencies. No Node.js, no Python, no Docker.
 
@@ -76,16 +76,16 @@ This will:
 
 ### Step 3: Run the wizard
 
-Open Claude Code in the repo directory:
-
+**Claude Code**:
 ```bash
-cd ~/repos/my-agent
-claude
+cd ~/repos/my-agent && claude
+# Then type: /agent-init
 ```
 
-Then type:
-```
-/agent-init
+**Other tools** (Cursor, Codex, etc.):
+```bash
+# Open the repo in your tool and paste:
+# "Follow the instructions in WIZARD.md"
 ```
 
 The wizard will:
@@ -93,22 +93,18 @@ The wizard will:
 2. **Ask 6 questions** — name, role, personality, philosophy, your name, language
 3. **Ask about memory** — full learning loop or minimal?
 4. **Show confirmation** — review all answers, edit if needed
-5. **Build everything** — create CLAUDE.md, AGENTS.md, memory/, skills, docs
+5. **Build everything** — create AGENT.md, memory/, skills, docs, tool-specific stubs
 6. **Git commit** — all files committed in one clean commit
 
 ### Step 4: Start using your agent
 
-Open a new Claude Code session (to pick up the new CLAUDE.md):
-
-```bash
-claude
-```
+Open a new session in your AI coding assistant (to pick up the new AGENT.md):
 
 Your agent now has:
-- `/resume` — start of session
-- `/remember` — save to memory
-- `/recall` — search memory
-- `/handoff` — end of session
+- `resume` — start of session
+- `remember` — save to memory
+- `recall` — search memory
+- `handoff` — end of session
 
 ## Update Skills in Existing Agents
 
@@ -118,9 +114,13 @@ When the framework is updated (new skills, bug fixes), propagate to your agents:
 
 ```bash
 agent-install ~/repos/my-agent/
+# With explicit target:
+agent-install --target claude ~/repos/my-agent/
+agent-install --target cursor ~/repos/my-agent/
+agent-install --target claude,cursor ~/repos/my-agent/
 ```
 
-This copies the latest skill files to `.claude/commands/agent-core/` without touching your CLAUDE.md, AGENTS.md, or memory.
+This copies the latest skill files to the correct directory for your tool and regenerates tool-specific stubs from AGENT.md, without touching AGENT.md or memory.
 
 ### All agent repos
 
@@ -130,9 +130,12 @@ agent-install-all --dry-run
 
 # Then apply
 agent-install-all
+
+# With target override for all repos
+agent-install-all --target claude
 ```
 
-Scans `~/repos/` (4 levels deep) for repos with agent identity markers in CLAUDE.md. Skips the framework's own repo.
+Scans `~/repos/` (4 levels deep) for repos with agent identity markers in AGENT.md (or CLAUDE.md for backward compatibility). Skips the framework's own repo.
 
 Options:
 ```bash
@@ -161,13 +164,22 @@ When you run `agent-init` or `agent-install`, here's what goes into the target r
 
 | Source (framework) | Destination (agent repo) | Tracked in git? |
 |--------------------|-------------------------|-----------------|
-| `skills/*.md` | `.claude/commands/agent-core/*.md` | No (gitignored) |
+| `skills/*.md` | Per-target directory (see below) | No (gitignored) |
 | `templates/memory/*` | `memory/*` | Optional |
 | `docs/*.md` | `docs/*.md` | Yes |
 | `templates/.gitignore.tmpl` | `.gitignore` | Yes |
-| (wizard generates) | `CLAUDE.md` | Yes |
-| (wizard generates) | `AGENTS.md` | Yes |
+| (wizard generates) | `AGENT.md` | Yes |
+| (adapter generates) | `CLAUDE.md` / `AGENTS.md` / `.cursorrules` | No (auto-generated) |
 | (auto) | `.agent-framework-path` | No (gitignored) |
+
+Skill destination per `--target`:
+
+| Target | Skill directory |
+|--------|----------------|
+| `claude` | `.claude/commands/agent-core/` |
+| `codex` | `.claude/commands/agent-core/` |
+| `cursor` | `.cursor/rules/agent-core/` |
+| `generic` | `skills/` |
 
 Skills are **not** tracked in the agent repo's git — they're installed from the framework and updated via `agent-install`. This means:
 - One source of truth for skill logic
@@ -183,7 +195,7 @@ cd ~/repos/my-agent
 rm -rf .claude/commands/agent-core/
 rm -f .agent-framework-path
 rm -f .claude/commands/agent-init.md
-# Memory and identity files (CLAUDE.md, AGENTS.md, memory/) are yours — keep or delete as needed
+# Memory and identity files (AGENT.md, memory/) are yours — keep or delete as needed
 ```
 
 ## Troubleshooting
@@ -207,13 +219,13 @@ echo "$HOME/repos/agents/agent-framework" > .agent-framework-path
 
 After `agent-install`, you need to **restart Claude Code** (or reload the window in VS Code) for new commands to appear.
 
-### "CLAUDE.md already exists" warning
+### "AGENT.md already exists" warning
 
 If you're re-initializing an existing agent, `agent-init` warns before overwriting. To update skills without touching identity files, use `agent-install` instead.
 
 ### agent-install-all skips a repo
 
-The script only updates repos where CLAUDE.md contains one of: "Agent ID", "Memory System", or "Learning Loop". If your CLAUDE.md doesn't have these markers, the script won't detect it as an agent repo.
+The script detects repos by looking for `AGENT.md` (or `CLAUDE.md` for backward compat) containing one of: "Agent ID", "Memory System", or "Learning Loop". If your identity file doesn't have these markers, the script won't detect it as an agent repo.
 
 ### Memory not persisting between sessions
 

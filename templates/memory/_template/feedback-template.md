@@ -14,6 +14,8 @@ metadata:
   last_context: null
   verified_by_user: pending  # yes | no | pending
   promoted_to: null          # null | "CLAUDE.md#section" | "user-docs"
+  evolved_to: null           # null | "skill:{skill-name}"
+  skill_version: null         # null | 1, 2, 3...
 ---
 
 # Feedback — {Title}

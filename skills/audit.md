@@ -8,14 +8,14 @@ Scan all memory entries and report what was applied, corrected, missed, stale, o
 
 ## Self-Configuration (run once per session)
 
-Read the repo's `CLAUDE.md` to extract:
+Read the repo's `AGENT.md` (or `CLAUDE.md` for backward compatibility) to extract:
 - **AGENT_NAME**: from Identity table -> Name field
 - **AGENT_ID**: from Identity table -> Agent ID field
 - **HUMAN_NAME**: from "Workspace Human" section
 - **LANGUAGE**: from Identity table or default English
 - **PERSONA_PARTICLE**: from Persona section (speech ending particle, if any)
 
-Use these values throughout. If CLAUDE.md is missing, use defaults:
+Use these values throughout. If neither file is found, use defaults:
 - AGENT_NAME = repo directory name
 - HUMAN_NAME = "human"
 
@@ -80,6 +80,30 @@ For each `feedback` / `pattern` entry, check Stage 5 criteria:
 
 If matches found, list them as **promotion candidates** and suggest `/promote {name}`.
 
+### Step 3.5 — Check skill evolution candidates
+
+For each `pattern` / `feedback` entry with `applied_count >= evolution_threshold` (read from `.agent-config.yaml`, default 3):
+
+1. Read the file body; count actionable steps in the "How to apply" section (numbered items `1.`, `2.`, `3.` or `### Step N` subsections — exclude examples, notes, and content under other headings)
+2. If >= 3 steps AND `evolved_to = null` AND applied across >= 2 distinct contexts → **skill evolution candidate**
+3. Don't double-count: if an entry qualifies for both promotion (Step 3) and evolution, prefer evolution (workflows should become skills, not rules)
+
+Output section: `### Ready to Evolve (skills) ({N})`
+Format: `- {name} — applied {N}x across {M} contexts, {S} steps -> suggest: /evolve {name}`
+
+### Step 3.6 — Check skill improvement candidates
+
+Search for `feedback` entries whose `category` matches the name of an existing skill file in `skills/` directory:
+
+```bash
+ls skills/*.md | sed 's|skills/||;s|\.md||'
+```
+
+If such feedback has `applied_count >= 3` and `verified_by_user = yes` → **skill improvement candidate** (the skill may need updating based on repeated corrections).
+
+Output section: `### Skill Improvements Suggested ({N})`
+Format: `- skill:{name} has {N} verified corrections -> suggest: update skill and bump version`
+
 ### Step 4 — Output report
 
 ```markdown
@@ -104,6 +128,14 @@ If matches found, list them as **promotion candidates** and suggest `/promote {n
 - `{name}` — applied {N}x across {M} contexts, all verified
   -> suggest: /promote {name}
 
+### Ready to Evolve (skills) ({N})
+- `{name}` — applied {N}x across {M} contexts, {S} steps
+  -> suggest: /evolve {name}
+
+### Skill Improvements Suggested ({N})
+- skill:`{name}` has {N} verified corrections
+  -> suggest: update skill and bump version
+
 ### Summary
 - Total active memories: {N}
 - Health score: {Applied & Verified / Total Active}
@@ -124,6 +156,7 @@ At the end of the report, suggest concrete actions:
 
 ## See also
 
-- `docs/LEARNING-LOOP.md` Stage 4 (EVOLVE) — if exists in repo
+- `docs/LEARNING-LOOP.md` Stage 4 (EVOLVE) and Stage 6 (EVOLVE SKILL) — if exists in repo
 - `/promote` — execute promotion for ready candidates
+- `/evolve` — graduate workflow patterns into executable skills
 - `/handoff` — auto-runs audit

@@ -1,11 +1,78 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s inherit_errexit
 
-FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET_DIR="${1:-.}"
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
+    echo "Error: bash 4.4+ required (found ${BASH_VERSION}). On macOS: brew install bash" >&2
+    exit 1
+fi
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+FRAMEWORK_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+
+TARGET_DIR="."
+TARGETS_RAW=""
+FORCE=false
+
+print_help() {
+    cat <<'EOF'
+Usage: agent-install [target-directory] [options]
+
+Install/update agent-framework skills in an existing agent repo.
+
+Options:
+  --target <list>    Comma-separated install targets: claude,cursor,codex,generic
+                      (default: auto-detect from repo contents)
+  --force             Non-interactive install: overwrite locally modified files
+                      (a .bak backup is created first) without prompting
+  -h, --help          Show this help
+
+Examples:
+  agent-install /path/to/agent
+  agent-install /path/to/agent --target claude,cursor
+  agent-install /path/to/agent --target generic --force
+EOF
+}
+
+# Parse args: any leading non-flag arg is treated as the target directory.
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --target)
+            TARGETS_RAW="${2:-}"
+            shift 2
+            ;;
+        --target=*)
+            TARGETS_RAW="${1#*=}"
+            shift
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        -h|--help)
+            print_help
+            exit 0
+            ;;
+        *)
+            POSITIONAL+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [ "${#POSITIONAL[@]}" -gt 0 ]; then
+    TARGET_DIR="${POSITIONAL[0]}"
+fi
+
 TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd)" || {
-    echo "Error: Directory '$1' does not exist."
-    echo "Usage: agent-install [target-directory]"
+    echo "Error: Directory '$TARGET_DIR' does not exist."
+    print_help
     exit 1
 }
 
@@ -14,34 +81,200 @@ echo "Source: $FRAMEWORK_DIR"
 echo "Target: $TARGET_DIR"
 echo ""
 
-# Verify target has agent identity
-if [ ! -f "$TARGET_DIR/CLAUDE.md" ] && [ ! -f "$TARGET_DIR/AGENTS.md" ]; then
-    echo "Error: No CLAUDE.md or AGENTS.md found in $TARGET_DIR"
+# Identity file detection: AGENT.md is the source of truth; fall back to
+# legacy CLAUDE.md / AGENTS.md with a migration warning (backward compat).
+IDENTITY_FILE=""
+if [ -f "$TARGET_DIR/AGENT.md" ]; then
+    IDENTITY_FILE="AGENT.md"
+elif [ -f "$TARGET_DIR/CLAUDE.md" ]; then
+    IDENTITY_FILE="CLAUDE.md"
+    echo "WARNING: No AGENT.md found — using legacy CLAUDE.md as identity file."
+    echo "         Consider migrating to AGENT.md (see docs/INSTALLATION.md)."
+elif [ -f "$TARGET_DIR/AGENTS.md" ]; then
+    IDENTITY_FILE="AGENTS.md"
+    echo "WARNING: No AGENT.md found — using legacy AGENTS.md as identity file."
+    echo "         Consider migrating to AGENT.md (see docs/INSTALLATION.md)."
+else
+    echo "Error: No AGENT.md, CLAUDE.md, or AGENTS.md found in $TARGET_DIR"
     echo "Run 'agent-init $TARGET_DIR' first to create an agent."
     exit 1
 fi
 
-INSTALLED=0
+# ---- md5 helper (Linux md5sum, macOS md5 -q fallback) ----
+# Check availability once at top level (not inside subshell where flag would be lost)
+MD5_UNAVAILABLE=false
+if ! command -v md5sum &>/dev/null && ! command -v md5 &>/dev/null; then
+    MD5_UNAVAILABLE=true
+    echo "Warning: no md5 utility found — conflict detection disabled, files will be overwritten on update" >&2
+fi
 
-# Install Claude Code commands
-if [ -d "$TARGET_DIR/.claude" ] || [ -f "$TARGET_DIR/CLAUDE.md" ]; then
-    echo "Installing Claude Code commands..."
-    mkdir -p "$TARGET_DIR/.claude/commands/agent-core"
+md5_of() {
+    if command -v md5sum &>/dev/null; then
+        md5sum "$1" | awk '{print $1}'
+    elif command -v md5 &>/dev/null; then
+        md5 -q "$1"
+    else
+        echo "no-md5-$1-$$"
+    fi
+}
+
+STAMP_FILE="$TARGET_DIR/.agent-framework-install-stamp"
+
+# ---- Conflict-aware single-file installer ----
+# Copies $src to $dest. If $dest already exists, differs from $src, and was
+# modified since the last recorded install, warn (or, with --force, back up
+# and overwrite non-interactively).
+install_skill_file() {
+    local src="$1" dest="$2"
+
+    if [ -f "$dest" ]; then
+        local src_hash dest_hash
+        src_hash="$(md5_of "$src")"
+        dest_hash="$(md5_of "$dest")"
+
+        if [ "$MD5_UNAVAILABLE" = true ]; then
+            echo "  Warning: no md5 utility found — cannot detect local modifications, overwriting $(basename "$dest")" >&2
+        elif [ "$src_hash" != "$dest_hash" ]; then
+            local modified_after_install=true
+            if [ -f "$STAMP_FILE" ] && [ ! "$dest" -nt "$STAMP_FILE" ]; then
+                modified_after_install=false
+            fi
+
+            if [ "$modified_after_install" = true ]; then
+                if [ "$FORCE" = true ]; then
+                    cp "$dest" "$dest.bak" || { echo "ERROR: could not back up $(basename "$dest") before overwrite (target: $TARGET_DIR)" >&2; return 1; }
+                    echo "  WARNING: $(basename "$dest") has local modifications. Backed up to $(basename "$dest").bak and overwritten (--force)." >&2
+                elif [ -t 0 ]; then
+                    local reply="n"
+                    read -r -p "  WARNING: $(basename "$dest") has local modifications. Overwrite? [y/N] " reply || reply="n"
+                    if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+                        echo "  Skipped $(basename "$dest") (local modifications, user declined)" >&2
+                        return 2
+                    fi
+                    cp "$dest" "$dest.bak" || { echo "ERROR: could not back up $(basename "$dest") before overwrite (target: $TARGET_DIR)" >&2; return 1; }
+                else
+                    echo "  Skipped $(basename "$dest") (local modifications, non-interactive — use --force to overwrite)" >&2
+                    return 2
+                fi
+            fi
+        fi
+    fi
+
+    cp "$src" "$dest" || { echo "ERROR: failed to install $(basename "$dest")" >&2; return 1; }
+}
+
+# Copies every skills/*.md from the framework into $1, returns count on stdout.
+# install_skill_file returns 0=installed, 1=error (fatal), 2=skipped (conflict).
+copy_skills_to() {
+    local dest_dir="$1"
+    mkdir -p "$dest_dir"
+    local count=0 skipped=0
     for skill in "$FRAMEWORK_DIR/skills/"*.md; do
         [ -f "$skill" ] || continue
-        filename=$(basename "$skill")
-        cp "$skill" "$TARGET_DIR/.claude/commands/agent-core/$filename"
-        INSTALLED=$((INSTALLED + 1))
+        local filename rc=0
+        filename="$(basename "$skill")"
+        install_skill_file "$skill" "$dest_dir/$filename" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            count=$((count + 1))
+        elif [ "$rc" -eq 2 ]; then
+            skipped=$((skipped + 1))
+        else
+            return 1
+        fi
     done
-    echo "  Installed $INSTALLED skills -> .claude/commands/agent-core/"
+    [ "$skipped" -gt 0 ] && echo "  ($skipped skill(s) skipped due to local modifications)" >&2
+    echo "$count"
+}
+
+# Regenerates a tool-specific compatibility stub (CLAUDE.md / AGENTS.md) from
+# AGENT.md. Stubs are derived artifacts — AGENT.md remains the source of truth.
+generate_stub() {
+    local stub_name="$1"
+    if [ ! -f "$TARGET_DIR/AGENT.md" ]; then
+        return 0
+    fi
+    local stub_path="$TARGET_DIR/$stub_name"
+    {
+        echo "<!-- Auto-generated from AGENT.md by agent-framework. Edit AGENT.md, not this file. -->"
+        echo ""
+        cat "$TARGET_DIR/AGENT.md"
+    } > "$stub_path"
+    echo "  Regenerated $stub_name from AGENT.md"
+}
+
+# ---- Target resolution: explicit --target list, or auto-detect ----
+detect_targets() {
+    local detected=()
+    [ -d "$TARGET_DIR/.claude" ] && detected+=("claude")
+    [ -d "$TARGET_DIR/.cursor" ] && detected+=("cursor")
+    if [ -f "$TARGET_DIR/AGENTS.md" ] && [ ! -d "$TARGET_DIR/.claude" ]; then
+        detected+=("codex")
+    fi
+    if [ "${#detected[@]}" -eq 0 ]; then
+        detected+=("generic")
+    fi
+    printf '%s\n' "${detected[@]}"
+}
+
+TARGET_LIST=()
+if [ -n "$TARGETS_RAW" ]; then
+    IFS=',' read -ra TARGET_LIST <<< "$TARGETS_RAW"
+else
+    while IFS= read -r t; do
+        [ -n "$t" ] && TARGET_LIST+=("$t")
+    done < <(detect_targets)
 fi
+
+INSTALLED=0
+
+for raw_target in "${TARGET_LIST[@]:-}"; do
+    target="$(echo "$raw_target" | tr -d '[:space:]')"
+    [ -n "$target" ] || continue
+
+    case "$target" in
+        claude)
+            echo "Installing target: claude"
+            n=$(copy_skills_to "$TARGET_DIR/.claude/commands/agent-core")
+            INSTALLED=$((INSTALLED + n))
+            echo "  Installed $n skills -> .claude/commands/agent-core/"
+            generate_stub "CLAUDE.md"
+            ;;
+        codex)
+            echo "Installing target: codex"
+            n=$(copy_skills_to "$TARGET_DIR/.claude/commands/agent-core")
+            INSTALLED=$((INSTALLED + n))
+            echo "  Installed $n skills -> .claude/commands/agent-core/"
+            generate_stub "AGENTS.md"
+            ;;
+        cursor)
+            echo "Installing target: cursor"
+            n=$(copy_skills_to "$TARGET_DIR/.cursor/rules/agent-core")
+            INSTALLED=$((INSTALLED + n))
+            echo "  Installed $n skills -> .cursor/rules/agent-core/"
+            generate_stub ".cursorrules"
+            ;;
+        generic)
+            echo "Installing target: generic"
+            n=$(copy_skills_to "$TARGET_DIR/skills")
+            INSTALLED=$((INSTALLED + n))
+            echo "  Installed $n skills -> skills/"
+            generate_stub "AGENTS.md"
+            ;;
+        *)
+            echo "Warning: unknown target '$target', skipping"
+            ;;
+    esac
+done
 
 # Install memory templates (if memory/ exists)
 if [ -d "$TARGET_DIR/memory" ]; then
     echo "Updating memory templates..."
     mkdir -p "$TARGET_DIR/memory/_template"
-    cp "$FRAMEWORK_DIR/templates/memory/_template/"*.md "$TARGET_DIR/memory/_template/" 2>/dev/null || true
-    echo "  Templates updated"
+    if cp "$FRAMEWORK_DIR/templates/memory/_template/"*.md "$TARGET_DIR/memory/_template/" 2>/dev/null; then
+        echo "  Templates updated"
+    else
+        echo "  WARNING: failed to update memory templates" >&2
+    fi
 fi
 
 # Install docs
@@ -63,6 +296,9 @@ fi
 
 # Save framework path
 echo "$FRAMEWORK_DIR" > "$TARGET_DIR/.agent-framework-path"
+
+# Record install stamp (used for conflict detection on next run)
+date -u +"%Y-%m-%dT%H:%M:%SZ" > "$STAMP_FILE" 2>/dev/null || touch "$STAMP_FILE"
 
 echo ""
 echo "Done! $INSTALLED skills installed/updated."

@@ -1,7 +1,7 @@
-# Learning Loop — 5-Stage Architecture
+# Learning Loop — 6-Stage Architecture
 
 > This document describes how an agent learns and improves through a structured feedback loop.
-> Reference: CLAUDE.md "Memory System" section, `memory/` directory
+> Reference: AGENT.md "Memory System" section, `memory/` directory
 
 ---
 
@@ -17,29 +17,29 @@ AI agents are not humans. They have three fundamental limitations that make ad h
 
 **Therefore**: Learning must be **structural** (files on disk with defined schemas), **auditable** (humans can inspect what was learned and when), and **transparent** (the agent announces when it applies a lesson, so the human can verify or correct in real time).
 
-The Learning Loop is not "trying to remember." It is a five-stage pipeline that captures corrections, forces pre-action recall, tracks verification, audits health, and graduates proven lessons into permanent rules.
+The Learning Loop is not "trying to remember." It is a six-stage pipeline that captures corrections, forces pre-action recall, tracks verification, audits health, graduates proven lessons into permanent rules, and evolves repeated workflows into executable skills.
 
 ---
 
-## The 5-Stage Loop
+## The 6-Stage Loop
 
 ```
-                      +------------------------------------+
-                      |                                    |
-                      v                                    |
-   +----------+  +----------+  +----------+  +----------+  +----------+
-   | 1 CAPTURE|->| 2 APPLY  |->| 3 VERIFY |->| 4 EVOLVE |->| 5 PROMOTE|
-   | Save     |  | Use      |  | Confirm  |  | Audit    |  | Graduate |
-   +----------+  +----------+  +----------+  +----------+  +----------+
-        ^                                          |              |
-        |                                          v              v
-        |                                  +------------+  +------------+
-        +----------------------------------| Refine     |  | Hard Rule  |
-                                           | memory     |  | in CLAUDE  |
-                                           +------------+  +------------+
+                      +--------------------------------------------------+
+                      |                                                    |
+                      v                                                    |
+   +----------+  +----------+  +----------+  +----------+  +----------+  +----------+
+   | 1 CAPTURE|->| 2 APPLY  |->| 3 VERIFY |->| 4 EVOLVE |->| 5 PROMOTE|->| 6 SKILL  |
+   | Save     |  | Use      |  | Confirm  |  | Audit    |  | Graduate |  | Evolve   |
+   +----------+  +----------+  +----------+  +----------+  +----------+  +----------+
+        ^                                          |              |              |
+        |                                          v              v              v
+        |                                  +------------+  +------------+  +------------+
+        +----------------------------------| Refine     |  | Hard Rule  |  | Executable |
+                                           | memory     |  | in AGENT   |  | skill      |
+                                           +------------+  +------------+  +------------+
 ```
 
-Each stage has clear inputs, outputs, and enforcement rules. Stages 1 and 2 happen during work. Stage 3 is embedded in Stage 2 (verification happens immediately after application). Stage 4 runs at session end. Stage 5 triggers when promotion criteria are met.
+Each stage has clear inputs, outputs, and enforcement rules. Stages 1 and 2 happen during work. Stage 3 is embedded in Stage 2 (verification happens immediately after application). Stage 4 runs at session end. Stage 5 triggers when promotion criteria are met. Stage 6 triggers when a multi-step pattern proves itself — it graduates from a memory entry into a reusable executable skill.
 
 ---
 
@@ -187,7 +187,7 @@ At the end of every session, the agent runs a health audit of its memory system.
 
 **Command**: `/promote`
 
-When a memory entry proves itself reliable across time and contexts, it graduates from a memory file into a permanent hard rule in CLAUDE.md (or AGENTS.md).
+When a memory entry proves itself reliable across time and contexts, it graduates from a memory file into a permanent hard rule in AGENT.md.
 
 ### Promotion Criteria (all must be met)
 
@@ -197,10 +197,10 @@ When a memory entry proves itself reliable across time and contexts, it graduate
 
 ### Promotion Process
 
-1. Agent proposes in reply: "Lesson X is ready for promotion to CLAUDE.md (applied N times, all verified across M contexts) — promote?"
+1. Agent proposes in reply: "Lesson X is ready for promotion to AGENT.md (applied N times, all verified across M contexts) — promote?"
 2. Human approves -> agent runs `/promote`:
-   - Adds the rule to the appropriate section of CLAUDE.md
-   - Updates memory entry: `promoted_to: "CLAUDE.md#section-name"`, `status: promoted`
+   - Adds the rule to the appropriate section of AGENT.md
+   - Updates memory entry: `promoted_to: "AGENT.md#section-name"`, `status: promoted`
    - Adds entry to `memory/_promotions.md` (audit trail)
    - Updates MEMORY.md index with promotion marker
 3. The memory file is **kept** — it serves as the audit trail for why the rule exists
@@ -209,11 +209,66 @@ When a memory entry proves itself reliable across time and contexts, it graduate
 
 If a promoted rule is later found to be wrong (context changed, was too narrow):
 
-1. Remove the rule from CLAUDE.md
+1. Remove the rule from AGENT.md
 2. Update memory: `promoted_to: null`, `status: active`, add demotion reason to Change Log
 3. Log demotion in `memory/_promotions.md`
 
 The lesson re-enters the loop at Stage 2 for further refinement.
+
+---
+
+## Stage 6: EVOLVE SKILL — Graduate to executable command
+
+**Command**: `/evolve`
+
+When a memory entry describes a multi-step workflow (not a simple rule) and has been applied reliably across contexts, it can graduate from a memory file into an executable skill — a reusable command the agent runs directly.
+
+### How It Differs from Promotion
+
+| | Stage 5: Promote | Stage 6: Evolve Skill |
+|---|---|---|
+| **Input** | Any proven memory | Multi-step workflow patterns |
+| **Output** | Hard rule in AGENT.md | Executable skill file in `skills/` |
+| **Criteria** | `applied_count >= 3`, verified, multi-context | Same + "How to apply" has >= 3 steps |
+| **Best for** | One-liner rules, constraints, principles | Multi-step procedures, workflows, recipes |
+
+### Evolution Criteria (all must be met)
+
+- `applied_count >= 3` (or configured `evolution_threshold`)
+- `verified_by_user = yes` consistently
+- "How to apply" section contains >= 3 distinct actionable steps
+- Applied across >= 2 distinct contexts
+- `evolved_to = null` (not already evolved)
+- `status = active`
+
+### Evolution Process
+
+1. `/audit` detects evolution candidates at session end (Step 3.5)
+2. Agent proposes: "Pattern X has a multi-step workflow applied 4 times across 3 contexts — evolve into a skill?"
+3. Human approves → agent runs `/evolve {slug}`:
+   - Extracts workflow steps from "How to apply" section
+   - Drafts a skill file with proper frontmatter, Self-Configuration, Steps
+   - Shows draft to user — **never auto-creates**
+4. On approval:
+   - Writes skill file to `skills/` directory
+   - Updates source memory: `evolved_to: "skill:{name}"`, `status: evolved`
+   - Logs in `memory/_evolutions.md` (parallel to `_promotions.md`)
+   - Adds `⚡ evolved to skill` marker in `memory/MEMORY.md`
+
+### Skill Improvement Loop
+
+Skills evolved from patterns are not static. When the agent receives corrections while using an evolved skill:
+
+1. `/remember` saves the correction as `feedback`
+2. `/audit` Step 3.6 detects feedback matching an existing skill's category
+3. After enough verified corrections → agent suggests updating the skill
+4. Updated skill gets a version bump in `_evolutions.md`
+
+This closes the loop: patterns become skills, skills get improved by feedback, improvements accumulate into the next skill version.
+
+### Proactive Detection
+
+`/remember` includes Step 4.5: when saving a multi-step `pattern`, it checks for similar existing patterns. If overlap is detected, it proactively suggests `/evolve` — so the agent doesn't wait for session-end audit to notice.
 
 ---
 
@@ -240,7 +295,9 @@ metadata:
   last_applied: null
   last_context: null
   verified_by_user: pending  # yes | no | pending
-  promoted_to: null          # null | "CLAUDE.md#section"
+  promoted_to: null          # null | "AGENT.md#section"
+  evolved_to: null           # null | "skill:{skill-name}"
+  skill_version: null         # null | 1, 2, 3...
 ---
 
 # {Title}
@@ -301,6 +358,7 @@ metadata:
 memory/
 ├── MEMORY.md                    <- Index / Map of Content (wikilinks)
 ├── _promotions.md               <- Promotion audit trail
+├── _evolutions.md               <- Skill evolution audit trail
 ├── _template/                   <- Memory file templates
 │   ├── feedback-template.md
 │   └── pattern-template.md
@@ -342,8 +400,9 @@ Work Phase (repeat)
   v
 /handoff (session end)
   |-- /audit runs inline (health report)
-  |-- Save session summary
-  |-- Check promotion candidates
+  |-- /save runs (session summary + memory update)
+  |-- Check promotion candidates (Stage 5)
+  |-- Check skill evolution candidates (Stage 6)
   |-- Commit + push memory/ to git
   |
   v
@@ -378,11 +437,11 @@ Session End
        PROMOTION CANDIDATE."
 
 [5] PROMOTE (criteria met)
-    -> Agent proposes: "This lesson is ready for CLAUDE.md
+    -> Agent proposes: "This lesson is ready for AGENT.md
        (applied 3 times, all verified, 2 projects) — promote?"
     -> Human approves
-    -> /promote adds hard rule to CLAUDE.md
-    -> Memory entry: promoted_to = "CLAUDE.md#philosophy-hard-rules"
+    -> /promote adds hard rule to AGENT.md
+    -> Memory entry: promoted_to = "AGENT.md#philosophy-hard-rules"
 ```
 
 ---
@@ -400,9 +459,10 @@ This is why "should you / shouldn't you" phrases get `feedback` type with high p
 
 ## References
 
-- `CLAUDE.md` or `AGENTS.md` — "Memory System" section (rules the agent follows)
+- `AGENT.md` — "Memory System" section (rules the agent follows)
 - `memory/_template/feedback-template.md` — feedback schema template
 - `memory/_template/pattern-template.md` — pattern schema template
 - `memory/_promotions.md` — promotion audit log
+- `memory/_evolutions.md` — skill evolution audit log
 - `memory/MEMORY.md` — Map of Content (index of all memories)
 - `docs/CUSTOMIZATION.md` — guide for customizing triggers, types, and persona
