@@ -97,6 +97,14 @@ Report: "Pulled {N} new commits from remote"
    - If NO -> check `memory/MEMORY.md` under `## Session History` for the most recent entry. Read that file.
    - If nothing found -> "No session history found — starting fresh."
 
+### Step 1.5 — Load the active project's identity file (multi-project agents)
+
+If the handoff frontmatter has a `project:` field and `projects/<project>/AGENT.md` exists, **read it now** so this session has that project's scoped rules before any work. These are deliberately NOT in the root `AGENT.md` (kept per-project to avoid cluttering unrelated projects).
+- Multiple projects touched last session → read each one's file.
+- No `project:` / file missing → skip (root rules suffice). **Single-project agents ignore this step.**
+- Tool note: for Claude Code the per-project file is `projects/<project>/CLAUDE.md`; other tools per adapter.
+- Mention in the Step 2 summary which project file was loaded.
+
 ### Step 2 — Present brief summary
 
 - Pull result (pulled N commits / already up to date / skipped — reason)

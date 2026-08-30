@@ -135,6 +135,8 @@ metadata:
 {reasoning so future sessions understand}
 ```
 
+> **Multi-project agents — add a `project:` scoping field** to `metadata:` (e.g. `project: my-app`, or `project: _shared` for cross-project facts). It scopes recall (`recall` can filter by project) and routes promotion (`promote` sends project-tagged lessons to `projects/<project>/AGENT.md`, `_shared` to root — see promote Step 1.5). Single-project agents can omit it.
+
 ### Step 4 — Update MEMORY.md index
 
 Read `memory/MEMORY.md`. Add a one-line entry under the matching section header. Create the section if it does not exist yet.

@@ -60,11 +60,26 @@ If standard criteria not met, output reasoning and ask user:
 - "Criteria not fully met — would you like to fast-track?" (explain what is missing)
 - Or "Needs {N} more applications before eligible"
 
-### Step 2 — Decide AGENT.md target section
+### Step 1.5 — Route by `project:` tag (multi-project agents)
 
-Read `AGENT.md` sections — pick the section that best matches the memory's category.
+If the memory has a `project:` metadata field (multi-project repos tag each memory by project), promote to the matching **per-project identity file** so project-specific rules don't clutter unrelated projects:
 
-General mapping (adapt to actual AGENT.md structure):
+| memory `project:` | target file |
+|-------------------|-------------|
+| `_shared` (or absent) | **root `AGENT.md`** — cross-project rules, loaded every session |
+| `<project-name>` | **`projects/<project-name>/AGENT.md`** — project-scoped; create it if missing (short project header + `> Project-scoped rules.` note) |
+
+**Rule of thumb:** a rule that only makes sense inside one project (a specific stack, plugin, client) → per-project file. Cross-cutting (communication, git, memory workflow, decision-presentation) → root. When unsure, ask the user.
+
+> **Tool adapters:** Claude Code reads nested identity files, so its per-project file is `projects/<project>/CLAUDE.md` (auto-loaded when working in that subtree); other tools per their adapter. **Single-project agents ignore this step** — everything promotes to the root file (backward-compatible).
+
+Below, **"target file"** = the file chosen here (root `AGENT.md` OR `projects/<project>/AGENT.md`).
+
+### Step 2 — Decide target section (within the target file from Step 1.5)
+
+Read the **target file**'s sections — pick the section that best matches the memory's category.
+
+General mapping (adapt to actual structure):
 
 | Memory category | Likely AGENT.md target |
 |-----------------|-------------------------|

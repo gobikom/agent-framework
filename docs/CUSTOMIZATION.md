@@ -259,3 +259,26 @@ agent-install --target claude,cursor ~/repos/my-agent/
 ```
 
 This generates files for both Claude Code and Cursor from the same `AGENT.md`.
+
+## 6. Multi-project agents (project-scoped rules & promotion)
+
+If one agent repo serves **several projects** under `projects/<name>/` (e.g. different apps, stacks, or clients), keep each project's hard rules in a **per-project identity file** so they don't clutter the others. This is optional — single-project agents ignore it entirely.
+
+### Layout
+
+| File | Holds | Loaded |
+|------|-------|--------|
+| root `AGENT.md` | agent identity + `_shared` cross-project rules (communication, git, memory workflow) | every session |
+| `projects/<name>/AGENT.md` | that project's scoped hard rules (stack/plugin/client-specific) | when working in that subtree |
+
+> **Tool adapters:** Claude Code reads nested identity files, so its per-project file is `projects/<name>/CLAUDE.md` (auto-loaded when it touches files in that directory). Also add a top-of-file callout in the root identity file: *"Before working in `projects/<X>/`, read that project's identity file first."*
+
+### How the skills cooperate
+
+- **`remember`** — tag each memory with a `project:` metadata field (`my-app`, or `_shared`).
+- **`recall`** — filter by project when resuming project work.
+- **`promote` (Step 1.5)** — routes by `project:` tag: `_shared` → root; `<project>` → `projects/<project>/AGENT.md`. Never dumps a project rule into the root file.
+- **`resume` (Step 1.5)** — reads the handoff's `project:` tag and loads that project's identity file so its rules are in context before work.
+
+### Why
+A rule like "this stack's date-picker is buggy, use the classic one" is noise for every other project. Scoping keeps each project's context lean and lets sibling agents (or future projects) stay clean. Cross-cutting rules still live in the root so they apply everywhere.
