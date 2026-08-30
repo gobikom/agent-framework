@@ -199,8 +199,9 @@ When a memory entry proves itself reliable across time and contexts, it graduate
 
 1. Agent proposes in reply: "Lesson X is ready for promotion to AGENT.md (applied N times, all verified across M contexts) — promote?"
 2. Human approves -> agent runs `/promote`:
-   - Adds the rule to the appropriate section of AGENT.md
-   - Updates memory entry: `promoted_to: "AGENT.md#section-name"`, `status: promoted`
+   - **Routes by `project:` tag** (multi-project agents): `_shared`/untagged → root `AGENT.md`; `<project>` → `projects/<project>/AGENT.md` (per-project identity file, so project rules don't clutter unrelated projects). Single-project agents → always root. See promote skill Step 1.5 + [CUSTOMIZATION.md §6](CUSTOMIZATION.md).
+   - Adds the rule to the appropriate section of the **target file**
+   - Updates memory entry: `promoted_to: "<target-file>#section-name"`, `status: promoted`
    - Adds entry to `memory/_promotions.md` (audit trail)
    - Updates MEMORY.md index with promotion marker
 3. The memory file is **kept** — it serves as the audit trail for why the rule exists

@@ -13,6 +13,7 @@ Agent Framework creates a complete agent repo with:
 - **6-Stage Learning Loop** — Capture → Apply → Verify → Evolve → Promote → Skill Evolution
 - **11 Core Skills** — remember, recall, apply, audit, handoff, resume, promote, evolve, supersede, archive, save
 - **Tool-Agnostic** — works with Claude Code, Cursor, Codex, and any AI coding assistant
+- **Multi-Project Scoping** — tag memories by `project:`; `promote`/`resume` route project-specific rules to per-project identity files (`projects/<name>/AGENT.md`) so unrelated projects stay uncluttered. Optional — single-project agents ignore it. See [docs/CUSTOMIZATION.md §6](docs/CUSTOMIZATION.md).
 - **Zero Dependencies** — Pure markdown + bash. No database, no server, no runtime.
 
 ## Quick Start
